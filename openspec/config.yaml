@@ -5,21 +5,19 @@ context: |
   Keep OpenSpec structural headings and SHALL/MUST keywords in English.
 rules:
   tasks:
-    - Test-Driven Development is mandatory for all implementation tasks.
-    - Structure tasks as red-green cycles: first write the failing test, then
-      only enough code to pass it. Never write implementation before a failing
-      test exists.
-    - Tests verify behavior at pre-agreed public seams, never implementation
-      details. Agree the seams in the design before tasks are written.
-    - Work in vertical slices: one test -> one minimal implementation -> repeat.
-      No horizontal slicing (all tests first, then all implementation).
-    - Expected values in tests must come from an independent source of truth
-      (known-good literal, worked example, the spec), never recomputed the way
-      the code does.
-    - Refactoring belongs to the review stage, not the red-green cycle.
+    - Test-Driven Development (TDD) is mandatory for every implementation
+      task: write the failing test first, then only enough code to pass it.
+    - Tests SHALL verify observable behavior through the public interfaces of
+      the system (tools, endpoints, commands, public functions), never through
+      implementation details.
+    - Derive test cases from the change's requirements and scenarios: one
+      scenario -> one failing test -> one minimal implementation -> repeat.
+    - Expected values in tests SHALL come from the spec, a scenario, or a
+      known-good example - never recomputed the same way the code computes them.
+    - Refactoring is not part of the test-first cycle; it belongs to review.
   design:
-    - Document the seams (public interfaces) to test at and what each seam
-      catches and misses.
+    - Document which public interfaces of the system the tests will target and
+      what each interface does and does not cover.
 operations:
   apply:
     guidance:
@@ -28,6 +26,8 @@ operations:
       - Run the narrow relevant test first, then the wider suite before marking
         a task complete. Keep test summaries concise.
       - Only mark a task complete when its tests pass.
+      - On completion, run the gap-analysis review described in the apply
+        skill and present its findings to the user for approval.
   archive:
     guidance:
       - Before archiving, capture any strategically critical information from

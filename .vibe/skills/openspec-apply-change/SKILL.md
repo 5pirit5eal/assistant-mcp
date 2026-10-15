@@ -128,6 +128,44 @@ In both branches, never create the root as a side effect: do not run `openspec i
    - If all done: report that tracked tasks are complete and suggest review or verification as appropriate before archiving
    - If paused: explain why and wait for guidance
 
+8. **Gap analysis review (on completion, before archiving)**
+   When all tasks are complete, run a fresh-eyes review before suggesting the
+   archive. Do NOT review inline with your own session context - your context
+   is saturated with the implementation and will miss its own blind spots.
+
+   Dispatch a subagent with a fresh session (no conversation history, no prior
+   tool results) and give it exactly this mission:
+   - Read the change's specs (requirements and scenarios) and the main specs
+     it touches, then read the actual implementation (code and tests).
+   - Gap analysis: does the implementation satisfy every requirement and every
+     scenario? List each gap as requirement/scenario -> what the spec demands
+     -> what the code does -> the concrete evidence (file and line).
+   - Engineering improvements: identify concrete improvement opportunities in
+     the touched code (simplification, error handling, missing test coverage,
+     naming, consistency with the rest of the codebase). No speculative
+     refactoring, no style bikeshedding - each finding needs evidence.
+   The subagent MUST NOT modify any files. It returns findings only.
+
+   Present the findings to the user for approval, grouped as "Spec gaps" and
+   "Engineering improvements", each with evidence. Wait for the user's
+   decision before doing anything with them.
+
+9. **Operative optimizations (after user approval)**
+   Based on the user's verdict on the review findings, dispatch a second
+   subagent (fresh session, no files modified by it directly) that proposes
+   operative optimizations - concrete edits, presented as diffs or
+   before/after blocks - to:
+   - `AGENTS.md` (or create it): conventions and constraints discovered during
+     this change that future agents should follow
+   - `openspec/config.yaml` (context, rules, operations): rule gaps the change
+     revealed (e.g., a rule that would have prevented a finding)
+   - `.vibe/skills/` (the OpenSpec skills): workflow gaps the change revealed
+   Also include approved spec gaps and approved engineering improvements as
+   actionable items (fix now or as a follow-up change).
+
+   Present the proposals to the user, apply only what the user approves, then
+   proceed to the archive suggestion.
+
 **Output During Implementation**
 
 ```
