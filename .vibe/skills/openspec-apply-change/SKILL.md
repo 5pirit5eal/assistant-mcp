@@ -103,6 +103,27 @@ In both branches, never create the root as a side effect: do not run `openspec i
    - Dynamic instruction from CLI
 
 6. **Implement tasks (loop until done or blocked)**
+   First, read the tasks file and derive the execution waves:
+   - The tasks file declares which tasks are parallelizable and which tasks
+     block which (per the tasks rules in `openspec/config.yaml`). If the
+     declaration is missing, derive the dependencies yourself from real
+     coupling (shared files, interfaces other tasks consume, ordering the
+     spec demands) and tell the user your derivation.
+   - **Wave 1**: every task whose blocking tasks are all complete. If several
+     such tasks are independent of each other, run them **in parallel**:
+     dispatch one subagent per parallelizable task, each with a fresh session,
+     the task description, the relevant spec/design context, the TDD rules,
+     and the instruction to implement test-first and mark its own task
+     checkbox when done. Do not run tasks in the same wave if they touch the
+     same files.
+   - Wait for the whole wave to finish before starting the next: a wave is
+     done when every subagent has completed or reported a blocker.
+   - **Next wave**: tasks whose blockers are now complete, again in parallel
+     where independent. Repeat until no tasks remain.
+   - Re-run `openspec instructions apply --change "<name>" --json` after each
+     wave to refresh progress and task locations.
+   If subagents are not available in the current environment, fall back to
+   executing wave by wave sequentially and say so.
 
    For each pending task:
    - Show which task is being worked on
