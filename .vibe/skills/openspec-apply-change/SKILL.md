@@ -116,6 +116,7 @@ In both branches, never create the root as a side effect: do not run `openspec i
    **Pause if:**
    - Task is unclear → ask for clarification
    - Implementation reveals a design issue → suggest updating artifacts
+   - A **hard bug or performance regression** is encountered → enter the `openspec-diagnose` loop before attempting a fix; never patch blind
    - A task needs work beyond what the spec and tasks describe, or you are tempted to drop, narrow, defer, or accept exceptions to specified behavior to make it fit → surface the added scope and ask; do not absorb it silently
    - Error or blocker encountered → report and wait for guidance
    - User interrupts
@@ -140,15 +141,20 @@ In both branches, never create the root as a side effect: do not run `openspec i
    - Gap analysis: does the implementation satisfy every requirement and every
      scenario? List each gap as requirement/scenario -> what the spec demands
      -> what the code does -> the concrete evidence (file and line).
+   - Standards: does the code follow the repo's documented standards
+     (AGENTS.md, openspec/config.yaml rules, conventions visible in the
+     surrounding codebase)? Each standards finding names the standard and the
+     evidence. Judgement calls, never hard violations; a documented repo
+     convention always wins over a generic heuristic.
    - Engineering improvements: identify concrete improvement opportunities in
      the touched code (simplification, error handling, missing test coverage,
      naming, consistency with the rest of the codebase). No speculative
      refactoring, no style bikeshedding - each finding needs evidence.
    The subagent MUST NOT modify any files. It returns findings only.
 
-   Present the findings to the user for approval, grouped as "Spec gaps" and
-   "Engineering improvements", each with evidence. Wait for the user's
-   decision before doing anything with them.
+   Present the findings to the user for approval, grouped as "Spec gaps",
+   "Standards findings", and "Engineering improvements", each with evidence.
+   Wait for the user's decision before doing anything with them.
 
 9. **Retro recommendation (on completion)**
    After the user has ruled on the review findings, assess - inline, no
