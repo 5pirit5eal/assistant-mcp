@@ -150,21 +150,24 @@ In both branches, never create the root as a side effect: do not run `openspec i
    "Engineering improvements", each with evidence. Wait for the user's
    decision before doing anything with them.
 
-9. **Operative optimizations (after user approval)**
-   Based on the user's verdict on the review findings, dispatch a second
-   subagent (fresh session, no files modified by it directly) that proposes
-   operative optimizations - concrete edits, presented as diffs or
-   before/after blocks - to:
-   - `AGENTS.md` (or create it): conventions and constraints discovered during
-     this change that future agents should follow
-   - `openspec/config.yaml` (context, rules, operations): rule gaps the change
-     revealed (e.g., a rule that would have prevented a finding)
-   - `.vibe/skills/` (the OpenSpec skills): workflow gaps the change revealed
-   Also include approved spec gaps and approved engineering improvements as
-   actionable items (fix now or as a follow-up change).
+9. **Retro recommendation (on completion)**
+   After the user has ruled on the review findings, assess - inline, no
+   subagent - whether this session revealed anything that should change the
+   project's operative surfaces (`AGENTS.md`, `openspec/config.yaml`, or the
+   OpenSpec skills). Examples: a convention future agents should follow, a
+   rule that would have prevented a finding, a skill gap the change exposed.
 
-   Present the proposals to the user, apply only what the user approves, then
-   proceed to the archive suggestion.
+   Give the user a one-line recommendation: `Retro empfohlen` (name the 1-3
+   candidates) or `Kein Retro notwendig` (one sentence why). Do NOT run the
+   retro yourself and do NOT dispatch a subagent for it - the retro is a
+   separate, user-invoked workflow: the user triggers the `openspec-retro`
+   skill manually when they want the proposals.
+
+   Approved spec gaps and approved engineering improvements remain actionable
+   items of this apply session (fix now or as a follow-up change); the retro
+   covers only the operative surfaces.
+
+   Then proceed to the archive suggestion.
 
 **Output During Implementation**
 

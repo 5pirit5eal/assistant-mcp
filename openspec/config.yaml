@@ -27,7 +27,10 @@ operations:
         a task complete. Keep test summaries concise.
       - Only mark a task complete when its tests pass.
       - On completion, run the gap-analysis review described in the apply
-        skill and present its findings to the user for approval.
+        skill and present its findings to the user for approval, then give the
+        one-line retro recommendation (Retro empfohlen / Kein Retro notwendig).
+        The retro itself (openspec-retro skill) is only run when the user
+        triggers it manually.
   archive:
     guidance:
       - Before archiving, capture any strategically critical information from
