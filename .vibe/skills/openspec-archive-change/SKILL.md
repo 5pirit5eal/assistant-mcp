@@ -183,7 +183,37 @@ In both branches, never create the root as a side effect: do not run `openspec i
    mv "<changeRoot>" "<planningHome.changesDir>/archive/<target-name>"
    ```
 
-6. **Display summary**
+6. **Delete transient planning artifacts (specs-only retention)**
+   After the move and a successful sync, delete the transient planning artifacts
+   from the archived change so that only the specs survive archiving.
+
+   First, before deleting anything, make sure strategically critical information
+   is not lost: scan proposal, design, and tasks for information that is
+   strategic, decision-relevant, or not yet captured elsewhere. Persist that
+   information where it belongs:
+   - Domain requirements, capabilities, and scenarios belong in the main spec
+     (they are synced in step 4; re-check that the sync captured them).
+   - Strategic project-level constraints, conventions, and decisions belong in
+     the project's `AGENTS.md` (create the file if it does not exist).
+   Then delete from the archived change directory every transient artifact,
+   typically `proposal.md`, `design.md`, and `tasks.md`, plus any other
+   non-spec artifacts the schema created (keep `specs/` and the CLI metadata
+   such as `.openspec.yaml`). If the deletion would leave the archived change
+   without any specs, keep the change directory as-is and warn the user.
+
+   ```bash
+   rm -f "<planningHome.changesDir>/archive/<target-name>/{proposal.md,design.md,tasks.md}"
+   ```
+
+7. **Display summary**
+   Show archive completion summary including:
+   - Change name
+   - Schema that was used
+   - Archive location
+   - Whether specs were synced (if applicable)
+   - Note about any warnings (incomplete artifacts/tasks)
+   - Confirmation that transient planning artifacts were deleted and only specs
+     were retained (and where strategic information was persisted)
 
    Show archive completion summary including:
    - Change name
