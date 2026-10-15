@@ -1,0 +1,43 @@
+schema: spec-driven
+context: |
+  Language: de
+  All artifacts must be written in de.
+  Keep OpenSpec structural headings and SHALL/MUST keywords in English.
+rules:
+  tasks:
+    - Test-Driven Development (TDD) is mandatory for every implementation
+      task: write the failing test first, then only enough code to pass it.
+    - For every task, declare whether it is parallelizable or blocked: group
+      tasks that can be implemented independently of each other into a
+      parallelizable batch, and state for each remaining task which tasks
+      block it. Base this on real dependencies (shared files, interfaces
+      other tasks consume, ordering the spec demands), not on guesswork.
+    - Tests SHALL verify observable behavior through the public interfaces of
+      the system (tools, endpoints, commands, public functions), never through
+      implementation details.
+    - Derive test cases from the change's requirements and scenarios: one
+      scenario -> one failing test -> one minimal implementation -> repeat.
+    - Expected values in tests SHALL come from the spec, a scenario, or a
+      known-good example - never recomputed the same way the code computes them.
+    - Refactoring is not part of the test-first cycle; it belongs to review.
+  design:
+    - Document which public interfaces of the system the tests will target and
+      what each interface does and does not cover.
+operations:
+  apply:
+    guidance:
+      - Implement test-first: write the failing test, run it to confirm it
+        fails for the expected reason, then write the minimal implementation.
+      - Run the narrow relevant test first, then the wider suite before marking
+        a task complete. Keep test summaries concise.
+      - Only mark a task complete when its tests pass.
+      - On completion, run the gap-analysis review described in the apply
+        skill and present its findings to the user for approval, then give the
+        one-line retro recommendation (Retro empfohlen / Kein Retro notwendig).
+        The retro itself (openspec-retro skill) is only run when the user
+        triggers it manually.
+  archive:
+    guidance:
+      - Before archiving, capture any strategically critical information from
+        proposal, design, and tasks into the main spec or AGENTS.md.
+      - Delete transient planning artifacts after the sync: only specs persist.
