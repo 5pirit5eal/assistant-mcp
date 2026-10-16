@@ -11,7 +11,7 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.11.31 /uv /usr/local/bin/uv
 
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src

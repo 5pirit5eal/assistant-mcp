@@ -60,7 +60,7 @@ auf dem letzten guten Commit oder `gcloud run services update-traffic` auf die
 vorherige Revision.
 
 Abhängigkeiten werden von [Dependabot](https://github.com/dependabot) überwacht
-(`pip`, `github-actions`, `docker`, wöchentlich). Patch- und Minor-Updates mergen per
+(`uv`, `github-actions`, `docker`, wöchentlich). Patch- und Minor-Updates mergen per
 Auto-Merge, sobald CI grün ist; Major-Updates bleiben für manuelles Review offen.
 
 ## Einmalige Einrichtung

@@ -17,8 +17,6 @@ jobs:
       - name: Fetch Dependabot metadata
         id: metadata
         uses: dependabot/fetch-metadata@v3
-        with:
-          skip-commit-verification: true
 
       - name: Enable auto-merge for patch and minor updates
         if: steps.metadata.outputs.update-type == 'semver:patch' || steps.metadata.outputs.update-type == 'semver:minor'

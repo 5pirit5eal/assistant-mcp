@@ -37,7 +37,7 @@ Bumping `requires-python` forces re-resolution anyway; upgrading all dependencie
 CI jobs:
 
 1. **host**: `astral-sh/setup-uv` (cache enabled, Python 3.14, `--frozen` sync) → `ruff check .`, `mypy src`, `pytest`. The soffice-gated tests may skip here; that is acceptable because job 2 covers them.
-2. **docker**: `docker build`, then run the full suite inside the image with `docker run ... uv run --no-sync pytest` (the pattern AGENTS.md prescribes), so Office-to-PDF tests execute against the image's LibreOffice rather than skipping. PR runs never push the image (per the ci-pipeline spec); image push happens only in `deploy.yml`.
+2. **docker**: `docker/setup-buildx-action` + `docker/build-push-action` (layer cache via the GitHub Actions cache backend, image loaded locally, never pushed), then run the full suite inside the image with `docker run ... uv run --no-sync pytest` (the pattern AGENTS.md prescribes), so Office-to-PDF tests execute against the image's LibreOffice rather than skipping. PR runs never push the image (per the ci-pipeline spec); image push happens only in `deploy.yml`. The same buildx/GHA-cache mechanism is used in `deploy.yml`'s verification and deploy jobs so the LibreOffice apt layer is rebuilt only when it changes.
 
 ### D4 - Artifact Registry + `deploy-cloudrun` action + WIF/OIDC
 
@@ -51,7 +51,7 @@ CI jobs:
 
 `.github/dependabot.yml` with:
 
-- `pip` (directory `/`, schedule weekly) — updates `pyproject.toml` + `uv.lock`
+- `uv` (directory `/`, schedule weekly) — updates `pyproject.toml` + `uv.lock` together; Dependabot's `uv` ecosystem understands uv.lock, while the `pip` ecosystem cannot regenerate it (a pip PR would bump `pyproject.toml` and leave the frozen lockfile stale, failing CI permanently)
 - `github-actions` (directory `/`) — keeps action versions current
 - `docker` (directory `/`) — base image bumps for `python:3.14-slim`
 
@@ -81,7 +81,7 @@ Per the project's testing rules, the tests this change relies on drive the publi
 3. One-time GCP setup (documented, run by the owner): Artifact Registry repository `assistant-mcp` in `europe-west1`; WIF pool `github-actions` + OIDC provider `github-com` (audience-restricted to repo `5pirit5eal/assistant-mcp`); deploy service account with roles from D4.
 4. Enable branch protection on `main`: require the `ci` and `docker` checks, PR-only merges — also enables Dependabot auto-merge.
 5. Merge to main: `deploy.yml` runs end-to-end and serves the new revision.
-6. Rollback strategy: redeploy the previous image tag via `workflow_dispatch` on the last known-good commit, or `gcloud run services update-traffic` to the previous revision.
+6. Rollback strategy: every main deploy keeps its commit-SHA image tag in Artifact Registry; roll back with `gcloud run services update-traffic` to the previous revision, or point the service at an older SHA-tagged image via `gcloud run deploy --image`.
 
 ## Open Questions
 
