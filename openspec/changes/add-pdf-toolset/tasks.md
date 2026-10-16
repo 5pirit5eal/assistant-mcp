@@ -31,5 +31,5 @@ Parallelisierbarkeit: Gruppe 1 ist Fundament und blockiert alle Folgenden. Danac
 
 ## 5. Deployment (Docker mit LibreOffice)
 
-- [ ] 5.1 Dockerfile um LibreOffice (core/writer/calc/impress) erweitern. Verifikation: `docker build` erfolgreich; `soffice --version` im Container lauffähig.
-- [ ] 5.2 Smoke-Test im Container: DOCX-XLSX-Konvertierung über MCP-Interface im gebauten Image ausführen. Verifikation: PDF-Ausgabe im Container erfolgreich.
+- [x] 5.1 Dockerfile um LibreOffice (core/writer/calc/impress) erweitern. Verifikation: `docker build` erfolgreich; `soffice --version` im Container lauffähig.
+- [x] 5.2 Smoke-Test im Container: DOCX-XLSX-Konvertierung über MCP-Interface im gebauten Image ausführen. Verifikation: PDF-Ausgabe im Container erfolgreich.

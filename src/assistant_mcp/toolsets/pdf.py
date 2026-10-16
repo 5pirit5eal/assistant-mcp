@@ -6,6 +6,7 @@ import io
 import shutil
 import subprocess
 import tempfile
+import zipfile
 from pathlib import Path
 
 from fastmcp import FastMCP
@@ -108,16 +109,37 @@ def _render_inline(tokens) -> str:
     return "".join(parts)
 
 
-def _token_text(token) -> str:
-    parts = []
-    for tok in token.children or []:
-        parts.append(tok.content if tok.type == "text" else "")
-    return "".join(parts)
-
-
 def _render_list_item(inline_token) -> Paragraph:
     content = _render_inline(inline_token.children or [])
     return Paragraph(f"&bull; {content}", _STYLES["BodyText"])
+
+
+def _consume_list(tokens, i: int, ordered: bool) -> tuple[list, int]:
+    """Consume a bullet or ordered list (including nested lists) from tokens[i]."""
+    open_type = "ordered_list_open" if ordered else "bullet_list_open"
+    close_type = "ordered_list_close" if ordered else "bullet_list_close"
+    flowables: list = []
+    depth = 1
+    number = 0
+    i += 1
+    while i < len(tokens) and depth > 0:
+        tok = tokens[i]
+        if tok.type == open_type:
+            depth += 1
+        elif tok.type == close_type:
+            depth -= 1
+        elif tok.type == "list_item_open":
+            number += 1
+        elif tok.type == "inline":
+            if ordered:
+                flowables.append(
+                    Paragraph(f"{number}. {_render_inline(tok.children)}", _STYLES["BodyText"])
+                )
+            else:
+                flowables.append(_render_list_item(tok))
+            flowables.append(Spacer(1, 2))
+        i += 1
+    return flowables, i
 
 
 def _render_table(header_cells: list[str], rows: list[list[str]]) -> Table:
@@ -147,20 +169,10 @@ def _markdown_to_story(markdown: str) -> list:
             story.append(Paragraph(_render_inline(inline.children), _STYLES["BodyText"]))
             story.append(Spacer(1, 8))
             i += 3
-        elif tok.type == "bullet_list_open":
-            i += 1
-            while i < len(tokens) and tokens[i].type != "bullet_list_close":
-                if tokens[i].type == "list_item_open":
-                    j = i + 1
-                    while tokens[j].type != "inline":
-                        j += 1
-                    story.append(_render_list_item(tokens[j]))
-                    story.append(Spacer(1, 2))
-                    i += 1
-                else:
-                    i += 1
-            i += 1
-        elif tok.type == "fence":
+        elif tok.type in ("bullet_list_open", "ordered_list_open"):
+            items, i = _consume_list(tokens, i, ordered=tok.type == "ordered_list_open")
+            story.extend(items)
+        elif tok.type in ("fence", "code_block"):
             story.append(Preformatted(_escape(tok.content), _CODE_STYLE))
             story.append(Spacer(1, 8))
             i += 1
@@ -193,6 +205,8 @@ def _markdown_to_story(markdown: str) -> list:
                 story.append(Spacer(1, 8))
             i += 1
         else:
+            if tok.content:
+                story.append(Paragraph(_escape(tok.content), _STYLES["BodyText"]))
             i += 1
     return story
 
@@ -201,8 +215,10 @@ def _markdown_to_story(markdown: str) -> list:
 def generate_pdf(text: str) -> File:
     """Generate a PDF from Markdown or plain text and return it as a file.
 
-    Supports Markdown: headings, paragraphs, bullet lists, tables, code
-    blocks, links, bold and italic. German umlauts render correctly.
+    Supports Markdown: headings, paragraphs, bullet and ordered lists,
+    tables, code blocks, links, bold and italic. German umlauts and
+    quotes render correctly; characters outside the built-in Latin
+    fonts (e.g. CJK) render as replacement glyphs.
 
     Args:
         text: Markdown or plain text content of the PDF.
@@ -240,6 +256,9 @@ def convert_to_pdf(content: str, format: str) -> File:
     if not data:
         raise ToolError("decoded file content is empty")
 
+    if not zipfile.is_zipfile(io.BytesIO(data)):
+        raise ToolError(f"invalid {fmt} file: not a valid OOXML container")
+
     if shutil.which("soffice") is None:
         raise ToolError("LibreOffice (soffice) is not available on the server")
 
@@ -259,8 +278,11 @@ def convert_to_pdf(content: str, format: str) -> File:
             tmpdir,
             str(source),
         ]
-        process = subprocess.run(cmd, capture_output=True, timeout=120, check=False)
+        try:
+            process = subprocess.run(cmd, capture_output=True, timeout=120, check=False)
+        except subprocess.TimeoutExpired as exc:
+            raise ToolError(f"conversion timed out for {fmt}") from exc
         if process.returncode != 0 or not result_file.exists():
             detail = process.stderr.decode(errors="replace").strip()
             raise ToolError(f"conversion failed for {fmt}: {detail or 'unknown error'}")
-        return File(data=result_file.read_bytes(), name="input.pdf", format="pdf")
+        return File(data=result_file.read_bytes(), name="output.pdf", format="pdf")

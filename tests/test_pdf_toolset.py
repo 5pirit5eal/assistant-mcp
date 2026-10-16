@@ -191,3 +191,80 @@ async def test_convert_to_pdf_corrupt_file_returns_error():
     result = await call_convert_to_pdf(_fixture_b64("corrupt.docx"), "docx")
     assert result.is_error
     assert "docx" in result.content[0].text or "conversion" in result.content[0].text
+
+
+async def test_convert_to_pdf_empty_content_returns_error():
+    result = await call_convert_to_pdf(base64.b64encode(b"").decode(), "docx")
+    assert result.is_error
+    assert "empty" in result.content[0].text
+
+
+async def test_convert_to_pdf_invalid_ooxml_container_returns_error():
+    result = await call_convert_to_pdf(base64.b64encode(b"not a real office file").decode(), "docx")
+    assert result.is_error
+    assert "invalid" in result.content[0].text
+
+
+async def test_convert_to_pdf_soffice_missing_returns_error(monkeypatch):
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+    result = await call_convert_to_pdf(_fixture_b64("sample.docx"), "docx")
+    assert result.is_error
+    assert "LibreOffice" in result.content[0].text
+
+
+# --- Markdown-Vollständigkeit und Stile ------------------------------------
+
+
+def _fonts(result) -> set[str]:
+    reader = _read_pdf(result)
+    fonts = set()
+    for page in reader.pages:
+        for font in (page.get("/Resources") or {}).get("/Font", {}).values():
+            fonts.add(str(font.get_object()["/BaseFont"]))
+    return fonts
+
+
+async def test_generate_pdf_indented_code_block_renders_content():
+    md = "Vorher\n\n    print('eingerückt')\n\nNachher\n"
+    result = await call_generate_pdf(md)
+    text = _pdf_text(result)
+    assert "print('eingerückt')" in text
+    assert "Vorher" in text
+    assert "Nachher" in text
+
+
+async def test_generate_pdf_ordered_list_keeps_numbering():
+    md = "1. Erster Schritt\n2. Zweiter Schritt\n"
+    result = await call_generate_pdf(md)
+    text = _pdf_text(result)
+    assert "1. Erster Schritt" in text
+    assert "2. Zweiter Schritt" in text
+
+
+async def test_generate_pdf_nested_bullet_list_renders_all_items():
+    md = "- A\n  - A1\n  - A2\n- B\n"
+    result = await call_generate_pdf(md)
+    text = _pdf_text(result)
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for item in ("A", "A1", "A2", "B"):
+        assert any(line.endswith(f" {item}") for line in lines), lines
+
+
+async def test_generate_pdf_unknown_block_falls_back_to_text():
+    md = '<div>Blockinhalt</div>\n\nAbsatz danach.\n'
+    result = await call_generate_pdf(md)
+    text = _pdf_text(result)
+    assert "Blockinhalt" in text
+
+
+async def test_generate_pdf_style_distinction_between_elements():
+    md = "# Titel\n\nFließtext.\n\n```\nprint('code')\n```\n"
+    result = await call_generate_pdf(md)
+    fonts = _fonts(result)
+    assert any("Helvetica-Bold" in font for font in fonts), fonts
+    assert any("Courier" in font for font in fonts), fonts
+
+
+async def test_generate_pdf_whitespace_only_returns_error():
+    result = await call_generate_pdf_error("   \n\t  ")
+    assert "text" in result.content[0].text
