@@ -2,11 +2,10 @@
 
 from fastmcp import FastMCP
 
-from . import echo, time_
+from . import pdf
 
 TOOLSETS: dict[str, FastMCP] = {
-    "echo": echo.mcp,
-    "time": time_.mcp,
+    "pdf": pdf.mcp,
 }
 
 __all__ = ["TOOLSETS"]
