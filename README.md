@@ -83,6 +83,10 @@ gcloud iam workload-identity-pools providers create-oidc github-com \
   --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
   --attribute-condition="assertion.repository == '5pirit5eal/assistant-mcp'"
 
+# Runtime-Service-Account (Identität des Cloud-Run-Service; bewusst ohne Rollen)
+gcloud iam service-accounts create assistant-mcp-runtime \
+  --project=rubenschulze-sandbox --display-name="assistant-mcp Cloud Run runtime"
+
 # Deploy-Service-Account
 gcloud iam service-accounts create github-actions-deploy \
   --project=rubenschulze-sandbox --display-name="GitHub Actions deploy"
@@ -99,7 +103,7 @@ gcloud run services add-iam-policy-binding assistant-mcp \
   --role="roles/run.admin"
 
 gcloud iam service-accounts add-iam-policy-binding \
-  $(gcloud projects describe rubenschulze-sandbox --format='value(projectNumber)')-compute@developer.gserviceaccount.com \
+  assistant-mcp-runtime@rubenschulze-sandbox.iam.gserviceaccount.com \
   --project=rubenschulze-sandbox \
   --member="serviceAccount:github-actions-deploy@rubenschulze-sandbox.iam.gserviceaccount.com" \
   --role="roles/iam.serviceAccountUser"

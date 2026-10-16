@@ -97,4 +97,6 @@ jobs:
           project_id: rubenschulze-sandbox
           image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
           env_vars: MCP_TRANSPORT=http
-          flags: --allow-unauthenticated
+          flags: >-
+            --allow-unauthenticated
+            --service-account=assistant-mcp-runtime@rubenschulze-sandbox.iam.gserviceaccount.com
