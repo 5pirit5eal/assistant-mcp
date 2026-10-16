@@ -30,6 +30,16 @@ rules:
     - >-
       Document which public interfaces of the system the tests will target and
       what each interface does and does not cover.
+    - >-
+      Design decisions that rely on library or framework behavior MUST be
+      verified empirically against the locked dependency version (uv.lock),
+      not against documentation of a different version range, before the
+      design is finalized.
+  proposal:
+    - >-
+      The Impact section MUST enumerate affected documentation surfaces
+      (e.g. README.md) whenever the change alters project structure, modules,
+      or public behavior.
 operations:
   apply:
     guidance:
@@ -51,10 +61,21 @@ operations:
         Tests that skip without a system tool (e.g. soffice) are not done
         when they pass locally as skips: run them inside the built Docker
         image before marking the change complete.
+      - >-
+        When an implementation legitimately deviates from a task's described
+        mechanism, update the task wording (or add a superseding task) before
+        checking it off, so checked text and delivered code agree.
   archive:
     guidance:
       - >-
         Before archiving, capture any strategically critical information from
         proposal, design, and tasks into the main spec or AGENTS.md.
       - >-
-        Delete transient planning artifacts after the sync: only specs persist.
+        Delete transient planning artifacts after the sync. When the sync was
+        performed and verified, delete the change's specs too - their content
+        lives in the main specs; only unsynced specs persist as the surviving
+        copy.
+      - >-
+        After the retention cleanup, remove archived change directories left
+        empty or metadata-only, and the archive directory itself when empty -
+        no archive remains once nothing survives the cleanup.

@@ -183,9 +183,16 @@ In both branches, never create the root as a side effect: do not run `openspec i
    mv "<changeRoot>" "<planningHome.changesDir>/archive/<target-name>"
    ```
 
-6. **Delete transient planning artifacts (specs-only retention)**
-   After the move and a successful sync, delete the transient planning artifacts
-   from the archived change so that only the specs survive archiving.
+6. **Delete transient planning artifacts (specs-only retention for unsynced changes)**
+   After the move, delete the transient planning artifacts from the archived
+   change. What survives depends on whether the sync in step 4 was performed
+   and verified:
+   - **Synced and verified:** the specs' content now lives in the main specs,
+     so delete the archived change's `specs/` directory too. Only the CLI
+     metadata (`.openspec.yaml`) remains.
+   - **Archive without syncing (or no delta specs performed no sync):** keep
+     the archived change's `specs/` — it is the only surviving copy of that
+     spec content.
 
    First, before deleting anything, make sure strategically critical information
    is not lost: scan proposal, design, and tasks for information that is
@@ -197,13 +204,23 @@ In both branches, never create the root as a side effect: do not run `openspec i
      the project's `AGENTS.md` (create the file if it does not exist).
    Then delete from the archived change directory every transient artifact,
    typically `proposal.md`, `design.md`, and `tasks.md`, plus any other
-   non-spec artifacts the schema created (keep `specs/` and the CLI metadata
-   such as `.openspec.yaml`). If the deletion would leave the archived change
-   without any specs, keep the change directory as-is and warn the user.
+   non-spec artifacts the schema created (keep the CLI metadata such as
+   `.openspec.yaml`). Delete `specs/` only when the sync was performed and
+   verified in step 4; if the archive was done without syncing, keep `specs/`
+   intact. If a synced deletion would remove specs whose main-spec counterpart
+   failed verification in step 4, stop: do not delete them and warn the user.
 
    ```bash
    rm -f "<planningHome.changesDir>/archive/<target-name>/{proposal.md,design.md,tasks.md}"
+   # Additionally, after a verified sync:
+   rm -rf "<planningHome.changesDir>/archive/<target-name>/specs"
    ```
+
+   Then remove the dead directories: if the archived change directory is empty
+   or contains only CLI metadata (`.openspec.yaml`), delete the entire
+   archived-change directory; delete the `archive` parent directory too when
+   it is empty afterwards. There is no archive left to keep once nothing
+   survives the retention cleanup.
 
 7. **Display summary**
    Show archive completion summary including:
@@ -212,15 +229,11 @@ In both branches, never create the root as a side effect: do not run `openspec i
    - Archive location
    - Whether specs were synced (if applicable)
    - Note about any warnings (incomplete artifacts/tasks)
-   - Confirmation that transient planning artifacts were deleted and only specs
-     were retained (and where strategic information was persisted)
-
-   Show archive completion summary including:
-   - Change name
-   - Schema that was used
-   - Archive location
-   - Whether specs were synced (if applicable)
-   - Note about any warnings (incomplete artifacts/tasks)
+   - Retention outcome: when the sync was performed and verified, confirm that
+     the transient planning artifacts AND the change's specs were deleted
+     because the content lives in the main specs (and where strategic
+     information was persisted); when archiving without syncing, confirm that
+     the change's specs were retained as the only surviving copy
 
 **Output On Success**
 
@@ -240,9 +253,11 @@ In both branches, never create the root as a side effect: do not run `openspec i
 - Use artifact graph (openspec status --json) for completion checking
 - Don't block archive on warnings - just inform and confirm
 - Preserve .openspec.yaml when moving to archive (it moves with the directory)
+- After retention cleanup, remove archived change directories left empty or metadata-only, and the `archive` directory itself when empty
 - Show clear summary of what happened
 - If sync is requested, run the `openspec-sync-specs` workflow inline (agent-driven)
 - Never archive while a spec sync is still in flight — run the sync inline and verify the main specs before moving `changeRoot`
+- Delete the archived change's `specs/` only after a performed and verified sync; never when the archive was done without syncing or when sync verification failed
 - If delta specs exist, always run the sync assessment and show the combined summary before prompting
 - Apply relevant runtime context and report conflicts; operation guidance remains advisory
 - Consider every guidance entry and explain any inapplicable or conflicting advice
