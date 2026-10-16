@@ -32,3 +32,9 @@ and `uv run mypy src`.
 - ODT/ODP input formats, Google Docs/Sheets, Mermaid and Vega-Lite
   diagrams are known follow-ups, deliberately out of scope of the
   pdf toolset change.
+
+## Deliberately deferred (Google OAuth)
+
+- In-tool use of the authenticated identity (`get_access_token()`,
+  per-user downstream API calls) is a known follow-up, deliberately
+  out of scope of the add-google-oauth change; tools ignore identity.

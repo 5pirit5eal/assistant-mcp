@@ -14,10 +14,18 @@ rules:
       parallelizable batch, and state for each remaining task which tasks
       block it. Base this on real dependencies (shared files, interfaces
       other tasks consume, ordering the spec demands), not on guesswork.
+      Tasks that mutate the dependency environment (uv.lock, .venv) are not
+      parallelizable with tasks that run the test suite or linters - treat
+      the environment as a shared file.
     - >-
       Tests SHALL verify observable behavior through the public interfaces of
       the system (tools, endpoints, commands, public functions), never through
       implementation details.
+    - >-
+      Configuration keys and other cross-module strings (environment variable
+      names, secret names, CLI flags) SHALL be defined once as named constants
+      in the module that owns them; tests import these constants instead of
+      duplicating the strings as literals.
     - >-
       Derive test cases from the change's requirements and scenarios: one
       scenario -> one failing test -> one minimal implementation -> repeat.
@@ -35,6 +43,11 @@ rules:
       verified empirically against the locked dependency version (uv.lock),
       not against documentation of a different version range, before the
       design is finalized.
+    - >-
+      Designs that wire configuration into a deployment MUST enumerate value
+      -> delivery (env var, secret, repository variable) for every value the
+      code requires to activate a feature; the rollout delivers the complete
+      activation contract, not a subset.
   proposal:
     - >-
       The Impact section MUST enumerate affected documentation surfaces

@@ -72,6 +72,16 @@ jobs:
             echo "  gh variable set WORKLOAD_IDENTITY_PROVIDER --body '$pool/github-actions/providers/github-com'" >&2
             exit 1
           fi
+      - name: Check OAuth allowlist variable
+        env:
+          ALLOWED_EMAILS: ${{ vars.MCP_ALLOWED_EMAILS }}
+        run: |
+          if [ -z "$ALLOWED_EMAILS" ]; then
+            echo "vars.MCP_ALLOWED_EMAILS is not set." >&2
+            echo "Set it to the comma-separated allowlist of Google accounts, e.g.:" >&2
+            echo "  gh variable set MCP_ALLOWED_EMAILS --body 'you@example.com'" >&2
+            exit 1
+          fi
       - uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
@@ -90,13 +100,25 @@ jobs:
           tags: ${{ env.IMAGE }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Resolve public service URL
+        run: |
+          url="$(gcloud run services describe assistant-mcp \
+            --region europe-west1 \
+            --project rubenschulze-sandbox \
+            --format 'value(status.url)')"
+          if [ -z "$url" ]; then
+            echo "Could not resolve the URL of service assistant-mcp." >&2
+            exit 1
+          fi
+          echo "MCP_BASE_URL=$url" >> "$GITHUB_ENV"
       - uses: google-github-actions/deploy-cloudrun@v3
         with:
           service: assistant-mcp
           region: europe-west1
           project_id: rubenschulze-sandbox
           image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
-          env_vars: MCP_TRANSPORT=http
+          env_vars: MCP_TRANSPORT=http,MCP_BASE_URL=${{ env.MCP_BASE_URL }},MCP_ALLOWED_EMAILS=${{ vars.MCP_ALLOWED_EMAILS }}
           flags: >-
             --allow-unauthenticated
             --service-account=assistant-mcp-runtime@rubenschulze-sandbox.iam.gserviceaccount.com
+            --set-secrets=GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,MCP_OAUTH_STORAGE_KEY=mcp-oauth-storage-key:latest

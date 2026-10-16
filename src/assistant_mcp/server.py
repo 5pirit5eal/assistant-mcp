@@ -3,13 +3,32 @@
 import os
 
 from fastmcp import FastMCP
+from fastmcp.server.auth import AuthProvider
 
+from .auth import create_auth_provider
 from .toolsets import TOOLSETS
 
-server = FastMCP("assistant-mcp", instructions="Modular assistant MCP server.")
 
-for _prefix, _toolset in TOOLSETS.items():
-    server.mount(_toolset, namespace=_prefix)
+def build_server(auth: AuthProvider | None = None) -> FastMCP:
+    """Assemble the FastMCP server from all registered toolsets.
+
+    ``auth`` supplies the auth provider directly (test seam); by default it
+    comes from the OAuth environment configuration, which yields no
+    authentication when unconfigured.
+    """
+    if auth is None:
+        auth = create_auth_provider()
+    server = FastMCP(
+        "assistant-mcp",
+        instructions="Modular assistant MCP server.",
+        auth=auth,
+    )
+    for _prefix, _toolset in TOOLSETS.items():
+        server.mount(_toolset, namespace=_prefix)
+    return server
+
+
+server = build_server()
 
 
 def main() -> None:

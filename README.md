@@ -53,7 +53,11 @@ manueller Auslösung (`workflow_dispatch`):
 3. Image-Build und Push nach Artifact Registry:
    `europe-west1-docker.pkg.dev/rubenschulze-sandbox/assistant-mcp/server`.
 4. Deploy des digest-gepinnten Images auf den Service `assistant-mcp` (Region
-   `europe-west1`, `MCP_TRANSPORT=http`, unauthentifizierter Zugriff erlaubt).
+   `europe-west1`, `MCP_TRANSPORT=http`, unauthentifizierter Zugriff erlaubt)
+   — inklusive OAuth-Konfiguration: `MCP_BASE_URL` (Service-URL) und
+   `MCP_ALLOWED_EMAILS` als plain Env-Vars, `GOOGLE_CLIENT_ID`,
+   `GOOGLE_CLIENT_SECRET` und `MCP_OAUTH_STORAGE_KEY` per `--set-secrets` aus
+   Secret Manager (siehe „Authentifizierung“).
 
 Deployen nur nach grüner Verifikation desselben Commits. Rollback: `workflow_dispatch`
 auf dem letzten guten Commit oder `gcloud run services update-traffic` auf die
@@ -62,6 +66,126 @@ vorherige Revision.
 Abhängigkeiten werden von [Dependabot](https://github.com/dependabot) überwacht
 (`uv`, `github-actions`, `docker`, wöchentlich). Patch- und Minor-Updates mergen per
 Auto-Merge, sobald CI grün ist; Major-Updates bleiben für manuelles Review offen.
+
+## Authentifizierung (Google OAuth 2.1)
+
+Der öffentlich erreichbare HTTP-Service verlangt für jeden Request ein gültiges
+OAuth-2.1-Token: Authorization-Code-Flow mit PKCE, Google als Identity Provider,
+dynamische Client-Registrierung; die Tokens stellt der Service selbst (FastMCP)
+aus. Ein App-Layer-Allowlist begrenzt den Zugriff auf explizit konfigurierte
+Google-Accounts: Wer sich bei Google authentifiziert, aber nicht auf der Allowlist
+steht, erhält kein brauchbares Token. Der OAuth-State (Client-Registrierungen und
+Token-Datensätze) liegt verschlüsselt in Firestore und überlebt Neustarts und
+Cold Starts. Der stdio-Transport (lokal) bleibt vollständig ohne Auth.
+
+**Aktivierungs-Kontrakt:** Die Auth aktiviert sich nur, wenn **alle** fünf
+Konfigurationswerte gesetzt sind. Ohne alle fünf startet der Server ohne
+Authentifizierung; bei einer Teilmenge verweigert er den Start und nennt die
+fehlenden Variablen.
+
+| Variable | Bedeutung | Injektion im Deploy |
+|---|---|---|
+| `GOOGLE_CLIENT_ID` | Google-OAuth-Client-ID | Secret Manager (`google-client-id`) |
+| `GOOGLE_CLIENT_SECRET` | Google-OAuth-Client-Secret | Secret Manager (`google-client-secret`) |
+| `MCP_BASE_URL` | Öffentliche Service-URL, absolut mit `https://` | Plain Env Var (löst der Workflow per `gcloud run services describe` auf) |
+| `MCP_ALLOWED_EMAILS` | Komma-separierte Allowlist, Match Case-insensitive | Plain Env Var (GitHub-Variable `MCP_ALLOWED_EMAILS`) |
+| `MCP_OAUTH_STORAGE_KEY` | Fernet-Key zur Verschlüsselung des OAuth-State | Secret Manager (`mcp-oauth-storage-key`) |
+
+### Einmalige Google-Cloud-Einrichtung
+
+1. **OAuth-Consent-Screen** anlegen (Konsole → APIs & Services → OAuth consent
+   screen, Typ *External*, App-Name und Support-Email setzen).
+2. **OAuth-Client** (Konsole → APIs & Services → Credentials → *Create OAuth
+   client ID*, Typ *Web application*) mit der Redirect-URI
+   `https://<service-url>/auth/callback`:
+
+   ```bash
+   gcloud run services describe assistant-mcp \
+     --region=europe-west1 --project=rubenschulze-sandbox \
+     --format='value(status.url)'
+   ```
+
+3. **Drei Secret-Manager-Secrets** anlegen. Client-ID/Secret aus Schritt 2
+   einsetzen; der Storage-Key ist ein frisch generierter Fernet-Key:
+
+   ```bash
+   echo -n "<client-id>" | \
+     gcloud secrets create google-client-id --project=rubenschulze-sandbox --data-file=-
+   echo -n "<client-secret>" | \
+     gcloud secrets create google-client-secret --project=rubenschulze-sandbox --data-file=-
+   uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" | \
+     gcloud secrets create mcp-oauth-storage-key --project=rubenschulze-sandbox --data-file=-
+   ```
+
+4. **Deploy-Service-Account** darf die drei Secrets lesen:
+
+   ```bash
+   for secret in google-client-id google-client-secret mcp-oauth-storage-key; do
+     gcloud secrets add-iam-policy-binding "$secret" --project=rubenschulze-sandbox \
+       --member="serviceAccount:github-actions-deploy@rubenschulze-sandbox.iam.gserviceaccount.com" \
+       --role="roles/secretmanager.secretAccessor"
+   done
+   ```
+
+5. **Firestore** (Native Mode) aktivieren und dem Runtime-Service-Account
+   Zugriff geben. Der Server nutzt explizit die **`(default)`-Datenbank** —
+   der Firestore-Free-Tier gilt nur für sie, nicht für benannte Datenbanken:
+
+   ```bash
+   gcloud firestore databases create \
+     --project=rubenschulze-sandbox --location=europe-west2 --type=firestore-native
+
+   gcloud projects add-iam-policy-binding rubenschulze-sandbox \
+     --member="serviceAccount:assistant-mcp-runtime@rubenschulze-sandbox.iam.gserviceaccount.com" \
+     --role="roles/datastore.user"
+   ```
+
+   Der OAuth-State ist so klein (Client-Registrierungen und Token-Datensätze
+   einer Person), dass der Free-Tier (u. a. 50k Lese- und 20k
+   Schreiboperationen pro Tag) locker ausreicht.
+
+6. **Allowlist als GitHub-Repository-Variable** hinterlegen (der Workflow liest
+   sie als `vars.MCP_ALLOWED_EMAILS` und bricht mit einer Fehlermeldung ab,
+   wenn sie fehlt):
+
+   ```bash
+   gh variable set MCP_ALLOWED_EMAILS \
+     --repo 5pirit5eal/assistant-mcp \
+     --body "you@example.com,other@example.com"
+   ```
+
+### MCP-Clients: Verbinden und Einloggen
+
+Der MCP-Endpoint ist `https://<service-url>/mcp`. OAuth-fähige Clients entdecken
+die Metadaten unter `/.well-known/oauth-protected-resource/mcp`, öffnen für die
+Autorisierung den Browser (Google-Login, Consent) und erhalten danach ein Token.
+Mit FastMCP:
+
+```python
+from fastmcp import Client
+
+async with Client("https://<service-url>/mcp", auth="oauth") as client:
+    tools = await client.list_tools()
+```
+
+Nur Google-Accounts von `MCP_ALLOWED_EMAILS` erhalten ein brauchbares Token.
+
+### Manuelle Verifikation nach dem Deploy
+
+- [ ] Browser-Login mit einem Allowlist-Account gelingt (Consent → Token) und
+      ein Tool-Call (z. B. `pdf_generate_pdf`) funktioniert.
+- [ ] Unauthentifizierte Requests werden abgelehnt:
+      `curl -i https://<service-url>/mcp` → `401`.
+- [ ] Der Login überlebt einen Neustart: neuen Deploy anstoßen (z. B. Workflow
+      manuell auf `main` auslösen) — der Client muss danach ohne erneuten Login
+      weiterarbeiten, weil der OAuth-State aus Firestore kommt.
+
+### Schlüssel-Rotation (`MCP_OAUTH_STORAGE_KEY`)
+
+Rotation: neuen Fernet-Key ins Secret schreiben → neue Revision. Alte Einträge
+lassen sich dann nicht mehr entschlüsseln und werden als *fehlend* behandelt:
+Clients müssen sich neu registrieren und neu einloggen. Token-Material wird nie
+im Klartext exponiert — niemals durch die Rotation, auch nicht im Fehlerfall.
 
 ## Einmalige Einrichtung
 
