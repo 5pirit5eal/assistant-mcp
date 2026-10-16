@@ -2,44 +2,44 @@
 
 ## Purpose
 
-Fähigkeit des MCP-Servers, aus strukturiertem Text (Plain Text oder Markdown) optisch gepflegte PDF-Dokumente zu erzeugen und als strukturierte MCP-Content-Antwort zurückzugeben.
+The MCP server's ability to produce visually polished PDF documents from structured text (plain text or Markdown) and return them as a structured MCP content response.
 
 ## ADDED Requirements
 
-### Requirement: PDF-Erzeugung aus Text
+### Requirement: PDF generation from text
 
-Das Tool `generate_pdf` des Toolsets `pdf` MUST aus einer Texteingabe ein gültiges PDF-Dokument erzeugen und die PDF-Bytes als strukturierte MCP-Content-Rückgabe zurückgeben (nicht als base64 im Text und nicht als Dateipfad).
+The `generate_pdf` tool of the `pdf` toolset MUST generate a valid PDF document from a text input and return the PDF bytes as a structured MCP content response (not as base64 in text and not as a file path).
 
-#### Scenario: Plain-Text-Eingabe erzeugt PDF
+#### Scenario: Plain-text input generates a PDF
 
-- **WHEN** `generate_pdf` mit einem Plain Text aufgerufen wird, der Absätze enthält (durch Leerzeilen getrennt)
-- **THEN** gibt das Tool gültige PDF-Bytes als strukturierte MCP-Content-Rückgabe zurück, die mit `%PDF-` beginnen
+- **WHEN** `generate_pdf` is called with plain text containing paragraphs (separated by blank lines)
+- **THEN** the tool returns valid PDF bytes as a structured MCP content response that begins with `%PDF-`
 
-#### Scenario: Markdown-Eingabe wird vollständig gerendert
+#### Scenario: Markdown input is fully rendered
 
-- **WHEN** `generate_pdf` mit Markdown aufgerufen wird, das Überschriften (`#` bis `###`), Absätze, Aufzählungslisten, Tabellen, Code-Blöcke, Links sowie `**bold**`- und `*italic*`-Auszeichnungen enthält
-- **THEN** rendert das erzeugte PDF alle diese Elemente als entsprechend formatierte Dokumentelemente (Überschriftenhierarchie, Tabellen mit Zellen, Code in Monospace, fette/kursive Texte)
+- **WHEN** `generate_pdf` is called with Markdown containing headings (`#` through `###`), paragraphs, bullet lists, tables, code blocks, links, and `**bold**`/`*italic*` markup
+- **THEN** the generated PDF renders all of these elements as correspondingly formatted document elements (heading hierarchy, tables with cells, code in monospace, bold/italic text)
 
-#### Scenario: Deutsche Umlaute und Sonderzeichen
+#### Scenario: German umlauts and special characters
 
-- **WHEN** `generate_pdf` mit Text aufgerufen wird, der deutsche Umlaute (ä, ö, ü, ß) sowie gängige Sonderzeichen enthält
-- **THEN** enthält das erzeugte PDF diese Zeichen korrekt (kein Ersatz- oder Fehlzeichen-Rendering)
+- **WHEN** `generate_pdf` is called with text containing German umlauts (ä, ö, ü, ß) and common special characters
+- **THEN** the generated PDF contains these characters correctly (no replacement or broken-glyph rendering)
 
-#### Scenario: Leere Eingabe
+#### Scenario: Empty input
 
-- **WHEN** `generate_pdf` mit leerer Texteingabe aufgerufen wird
-- **THEN** gibt das Tool einen aussagekräftigen Fehler zurück, statt ein leeres oder ungültiges PDF zu erzeugen
+- **WHEN** `generate_pdf` is called with empty text input
+- **THEN** the tool returns a meaningful error instead of producing an empty or invalid PDF
 
-### Requirement: Einheitliches Dokumentlayout
+### Requirement: Consistent document layout
 
-Das Tool `generate_pdf` MUST ein einheitliches, gepflegtes Dokumentlayout erzeugen: A4-Seitenformat, angemessene Seitenränder, konsistente Stile für Überschriften, Fließtext, Listen, Tabellen und Code-Blöcke, inklusive Mehrseiten-Umbruch bei langen Inhalten.
+The `generate_pdf` tool MUST produce a consistent, polished document layout: A4 page format, reasonable page margins, consistent styles for headings, body text, lists, tables, and code blocks, including multi-page flow for long content.
 
-#### Scenario: Konsistente Stile
+#### Scenario: Consistent styles
 
-- **WHEN** `generate_pdf` mit gemischtem Markdown (Überschriften, Text, Liste, Tabelle, Code-Block) aufgerufen wird
-- **THEN** unterscheiden sich die Stile der Elemente erkennbar voneinander (Größe/Gewicht der Überschriften, Monospace für Code, abgesetzte Tabellen)
+- **WHEN** `generate_pdf` is called with mixed Markdown (heading, text, list, table, code block)
+- **THEN** the styles of the elements are recognizably distinct (heading size/weight, monospace for code, visually separated tables)
 
-#### Scenario: Mehrseiten-Dokument
+#### Scenario: Multi-page document
 
-- **WHEN** `generate_pdf` mit einem Text aufgerufen wird, der eine Seite deutlich übersteigt
-- **THEN** besteht das erzeugte PDF aus mehreren Seiten, ohne dass Inhalt verloren geht
+- **WHEN** `generate_pdf` is called with text that clearly exceeds a single page
+- **THEN** the generated PDF consists of multiple pages, without any content being lost
