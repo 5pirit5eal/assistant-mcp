@@ -1,8 +1,10 @@
+# dependency-updates Specification
+
 ## Purpose
 
 Defines how the project's dependencies — Python packages, GitHub Actions workflows, and the Docker base image — are kept current through automated update proposals with a defined merge policy.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Automated dependency monitoring
 

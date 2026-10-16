@@ -1,8 +1,10 @@
+# cloud-run-deployment Specification
+
 ## Purpose
 
 Defines how the assistant-mcp server is deployed to Google Cloud Run automatically from `main`, using Artifact Registry for images and keyless Workload Identity Federation for authentication, so no manual gcloud steps or stored credentials are required.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Automated deployment on main and on demand
 
