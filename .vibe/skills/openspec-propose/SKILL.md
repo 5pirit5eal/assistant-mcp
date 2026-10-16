@@ -52,7 +52,7 @@ In both branches, never create the root as a side effect: do not run `openspec i
 
    **IMPORTANT**: Do NOT proceed without understanding what the user wants to build.
 
-   If the request contains ambiguity that would materially affect scope, externally observable behavior, compatibility, or acceptance criteria, ask the user before creating the change. For minor details, make a reasonable assumption and record it in the planning artifacts.
+   If the request contains ambiguity that would materially affect scope, externally observable behavior, compatibility, or acceptance criteria, ask the user before creating the change. Ask via the built-in `ask_user_question` tool: state your recommended resolution as the first option so choosing it accepts the recommendation, alternatives as further options, and free text for anything else. For minor details, make a reasonable assumption and record it in the planning artifacts.
 
 2. **Load project context**
 

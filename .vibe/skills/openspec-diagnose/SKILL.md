@@ -72,7 +72,7 @@ Generate **3-5 ranked hypotheses** before testing any of them; single-hypothesis
 
 > Format: "If <X> is the cause, then <changing Y> will make the bug disappear / <changing Z> will make it worse."
 
-**Show the ranked list to the user before testing** (this is a decision point for them, like the clarification questions in explore). They often have domain knowledge that re-ranks instantly. Don't block: proceed with your ranking if the user is away.
+**Show the ranked list to the user before testing**, using the built-in `ask_user_question` tool (this is a decision point for them, like the clarification questions in explore): offer your ranking as the leading option so choosing it confirms the order, and rely on the free-text option for re-ranking or corrections. They often have domain knowledge that re-ranks instantly. Don't block: proceed with your ranking if the user is away.
 
 ## Phase 4: Instrument
 
