@@ -19,3 +19,9 @@ and `uv run mypy src`.
   Never treat a skip as passing.
 - Project rules live in `openspec/config.yaml`; OpenSpec artifacts are
   written in English.
+
+## Deliberately deferred (pdf toolset)
+
+- ODT/ODP input formats, Google Docs/Sheets, Mermaid and Vega-Lite
+  diagrams are known follow-ups, deliberately out of scope of the
+  pdf toolset change.
