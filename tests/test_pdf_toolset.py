@@ -129,6 +129,33 @@ async def test_generate_pdf_markdown_link_url_present():
     assert "[" not in text
 
 
+# --- Tool-Schema (Input-Modelle) ---------------------------------------------
+
+
+async def test_tool_input_schema_has_documented_parameters():
+    async with Client(mcp) as client:
+        tools = {tool.name: tool for tool in await client.list_tools()}
+    assert set(tools) >= {"generate_pdf", "convert_to_pdf"}
+
+    generate = tools["generate_pdf"]
+    assert set(generate.input_schema["properties"]) == {"text"}
+    text_prop = generate.input_schema["properties"]["text"]
+    assert text_prop["type"] == "string"
+    assert text_prop["description"].strip()
+    assert isinstance(text_prop.get("examples"), list) and text_prop["examples"], (
+        "generate_pdf parameter 'text' must carry at least one example"
+    )
+
+    convert = tools["convert_to_pdf"]
+    assert set(convert.input_schema["properties"]) == {"content", "format"}
+    for name, prop in convert.input_schema["properties"].items():
+        assert prop["type"] == "string", name
+        assert prop["description"].strip(), name
+        assert isinstance(prop.get("examples"), list) and prop["examples"], (
+            f"convert_to_pdf parameter {name!r} must carry at least one example"
+        )
+
+
 # --- convert_to_pdf ---------------------------------------------------------
 
 

@@ -10,13 +10,13 @@ src/assistant_mcp/
 ├── server.py        # Einstiegspunkt: FastMCP-Server, mountet alle Toolsets
 ├── toolsets/
 │   ├── __init__.py  # Toolset-Registry
-│   ├── echo.py      # Beispiel-Toolset "echo"
-│   └── time_.py     # Beispiel-Toolset "time"
+│   └── pdf.py       # PDF-Toolset: Markdown-to-PDF und Office-to-PDF
 └── ...
 ```
 
 Jedes Toolset ist ein eigenes Modul mit einer FastMCP-Instanz; neue Toolsets werden in
-`toolsets/__init__.py` registriert und automatisch vom Server gemountet.
+`toolsets/__init__.py` registriert und automatisch vom Server gemountet. Das PDF-Toolset
+dient dabei als Referenzimplementierung.
 
 ## Lokale Entwicklung
 
