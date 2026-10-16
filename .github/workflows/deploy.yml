@@ -1,0 +1,102 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: europe-west1-docker.pkg.dev/rubenschulze-sandbox/assistant-mcp/server
+
+jobs:
+  host:
+    name: Verify on host (Python 3.14)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: true
+          python-version: "3.14"
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run mypy src
+      - run: uv run pytest
+
+  docker:
+    name: Verify inside container image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build image (layer-cached)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: assistant-mcp:deploy-verify
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Run test suite inside the image
+        run: >-
+          docker run --rm -v "${GITHUB_WORKSPACE}":/src:ro
+          -e UV_PROJECT_ENVIRONMENT=/tmp/venv assistant-mcp:deploy-verify
+          sh -c "cd /src && uv sync --frozen && uv run --no-sync pytest"
+
+  deploy:
+    name: Build, publish, and deploy to Cloud Run
+    needs: [host, docker]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check Workload Identity provider variable
+        env:
+          WIF_PROVIDER: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
+        run: |
+          if [ -z "$WIF_PROVIDER" ]; then
+            echo "vars.WORKLOAD_IDENTITY_PROVIDER is not set." >&2
+            echo "Run the one-time GCP setup in README.md, then:" >&2
+            pool="projects/<PROJECT_NUMBER>/locations/global/workloadIdentityPools"
+            echo "  gh variable set WORKLOAD_IDENTITY_PROVIDER --body '$pool/github-actions/providers/github-com'" >&2
+            exit 1
+          fi
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: github-actions-deploy@rubenschulze-sandbox.iam.gserviceaccount.com
+      - name: Log in to Artifact Registry
+        run: >-
+          gcloud auth print-access-token |
+          docker login -u oauth2accesstoken --password-stdin europe-west1-docker.pkg.dev
+      - uses: docker/setup-buildx-action@v4
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: assistant-mcp
+          region: europe-west1
+          project_id: rubenschulze-sandbox
+          image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          env_vars: MCP_TRANSPORT=http
+          flags: >-
+            --allow-unauthenticated
+            --service-account=assistant-mcp-runtime@rubenschulze-sandbox.iam.gserviceaccount.com

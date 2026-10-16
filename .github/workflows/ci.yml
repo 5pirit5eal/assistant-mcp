@@ -1,0 +1,47 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  host:
+    name: Lint, types, and tests (Python 3.14)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          enable-cache: true
+          python-version: "3.14"
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run mypy src
+      - run: uv run pytest
+
+  docker:
+    name: Build image and run tests inside it
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build image (layer-cached)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: assistant-mcp:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Run test suite inside the image
+        run: >-
+          docker run --rm -v "${GITHUB_WORKSPACE}":/src:ro
+          -e UV_PROJECT_ENVIRONMENT=/tmp/venv assistant-mcp:ci
+          sh -c "cd /src && uv sync --frozen && uv run --no-sync pytest"

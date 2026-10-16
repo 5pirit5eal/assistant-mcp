@@ -18,19 +18,9 @@ Enter explore mode. Think deeply. Visualize freely. Follow the conversation wher
 
 **Structured clarification (inspired by Matt Pocock's grilling skill):** When the user brings a plan, decision, or idea to stress-test, interview them systematically until you reach a shared understanding. Treat the discussion as a tree of open questions: every decision branches into the questions that depend on it.
 
-Work through the open questions in **rounds**. Each round asks every question whose prerequisites are already settled - the questions you can ask _now_ without guessing at answers you haven't heard yet. Number each question and give your recommended answer. Then wait for the user's answers before the next round.
+Work through the open questions in **rounds**. Each round asks every question whose prerequisites are already settled - the questions you can ask _now_ without guessing at answers you haven't heard yet. Give your recommended answer with every question, then wait for the user's answers before the next round.
 
-Format a round like so:
-
-```text
-Q1 - <question title>: <question body, might be multiple paragraphs, including multiple choices>
-  Empfehlung: <your recommended answer>
----
-Q2 - <question title>: <question body>
-  Empfehlung: <your recommended answer>
-```
-
-Word each question so "yes" accepts your recommended answer.
+Ask each round with the built-in `ask_user_question` tool: one question per decision, up to four questions per call (a larger round means consecutive calls). Make your recommended answer the first option and word the question so choosing that option accepts the recommendation; put trade-offs and consequences in the option descriptions, keep open alternatives as further options, and rely on the tool's free-text option for everything else. Set multiSelect when several answers are compatible.
 
 Each round of answers reshapes the tree: settled decisions unlock the questions that depended on them. Recompute the open questions and ask the next round. A question whose answer depends on another question still open in this round belongs in a _later_ round, not this one.
 
