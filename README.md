@@ -97,8 +97,9 @@ gcloud artifacts repositories add-iam-policy-binding assistant-mcp \
   --member="serviceAccount:github-actions-deploy@rubenschulze-sandbox.iam.gserviceaccount.com" \
   --role="roles/artifactregistry.writer"
 
-gcloud run services add-iam-policy-binding assistant-mcp \
-  --region=europe-west1 --project=rubenschulze-sandbox \
+# run.admin auf Projektebene: der Cloud-Run-Service existiert vor dem ersten
+# Deploy noch nicht, ein Binding auf dem Service wäre daher unmöglich
+gcloud projects add-iam-policy-binding rubenschulze-sandbox \
   --member="serviceAccount:github-actions-deploy@rubenschulze-sandbox.iam.gserviceaccount.com" \
   --role="roles/run.admin"
 
