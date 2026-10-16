@@ -1,8 +1,10 @@
+# ci-pipeline Specification
+
 ## Purpose
 
 Defines the automated verification pipeline that gates every change to the assistant-mcp server: lint, type-check, tests on the supported Python version, and a container-image build whose interior test run exercises system-tool-gated tests.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Automated verification for every change to main
 
