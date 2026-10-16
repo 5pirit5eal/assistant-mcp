@@ -1,0 +1,80 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: europe-west1-docker.pkg.dev/rubenschulze-sandbox/assistant-mcp/server
+
+jobs:
+  host:
+    name: Verify on host (Python 3.14)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+          python-version: "3.14"
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run mypy src
+      - run: uv run pytest
+
+  docker:
+    name: Verify inside container image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build image
+        run: docker build -t assistant-mcp:deploy-verify .
+      - name: Run test suite inside the image
+        run: >-
+          docker run --rm -v "${GITHUB_WORKSPACE}":/src:ro
+          -e UV_PROJECT_ENVIRONMENT=/tmp/venv assistant-mcp:deploy-verify
+          sh -c "cd /src && uv sync --frozen && uv run --no-sync pytest"
+
+  deploy:
+    name: Build, publish, and deploy to Cloud Run
+    needs: [host, docker]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check Workload Identity provider variable
+        env:
+          WIF_PROVIDER: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
+        run: |
+          if [ -z "$WIF_PROVIDER" ]; then
+            echo "vars.WORKLOAD_IDENTITY_PROVIDER is not set." >&2
+            echo "Run the one-time GCP setup in README.md, then:" >&2
+            echo "  gh variable set WORKLOAD_IDENTITY_PROVIDER --body 'projects/<PROJECT_NUMBER>/locations/global/workloadIdentityPools/github-actions/providers/github-com'" >&2
+            exit 1
+          fi
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: github-actions-deploy@rubenschulze-sandbox.iam.gserviceaccount.com
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker europe-west1-docker.pkg.dev
+      - name: Build and push image
+        run: |
+          docker build -t "$IMAGE:${GITHUB_SHA}" .
+          docker push "$IMAGE:${GITHUB_SHA}"
+      - name: Resolve pushed image digest
+        run: echo "IMAGE_DIGEST=$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE:${GITHUB_SHA}" | cut -d@ -f2)" >> "$GITHUB_ENV"
+      - uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: assistant-mcp
+          region: europe-west1
+          project_id: rubenschulze-sandbox
+          image: ${{ env.IMAGE }}@${{ env.IMAGE_DIGEST }}
+          env_vars: MCP_TRANSPORT=http
+          flags: --allow-unauthenticated
