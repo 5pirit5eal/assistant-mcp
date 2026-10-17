@@ -57,7 +57,31 @@ manueller Auslösung (`workflow_dispatch`):
    — inklusive OAuth-Konfiguration: `MCP_BASE_URL` (Service-URL) und
    `MCP_ALLOWED_EMAILS` als plain Env-Vars, `GOOGLE_CLIENT_ID`,
    `GOOGLE_CLIENT_SECRET` und `MCP_OAUTH_STORAGE_KEY` per `--set-secrets` aus
-   Secret Manager (siehe „Authentifizierung“).
+   Secret Manager (siehe „Authentifizierung“); dazu `MCP_STATELESS_HTTP=true` und
+   einen Startup-Probe auf `/healthz` (siehe „Startup-Probe und stateless HTTP“).
+
+### Startup-Probe und stateless HTTP
+
+Der Deploy konfiguriert einen Startup-Probe auf `GET /healthz` (Container-Port 8080,
+Budget 60 s für den Python-Kaltstart). Solange der Probe einer frischen Instanz noch
+nicht erfolgreich war, hält Cloud Run eingehende Requests zurück, statt sie an die
+noch nicht bereite Instanz zu routen — der Client sieht eine verzögerte, aber
+erfolgreiche Antwort statt einer Fehlerantwort. Der Deploy-Health-Check verweigert
+zudem das Rollout einer Revision, deren Startup-Probe nicht erfolgreich ist; die
+bisherige Revision bleibt erreichbar. Der Endpoint ist ohne Authentifizierung
+erreichbar und prüft absichtlich keine Abhängigkeiten (kein Firestore-Ping).
+
+Der HTTP-Transport läuft stateless: Jeder Request wird unabhängig bedient, es wird
+kein Session-State im Prozess gehalten. In diesem Modus bedient der MCP-Endpoint
+keinen GET-Server-Initiated-Stream mehr (Clients nutzen POST); der lokale
+stdio-Transport ist von der Variable unberührt. Persistenter State
+(OAuth-Registrierungen und Token-Datensätze) liegt verschlüsselt in Firestore;
+Lesezugriffe werden prozesslokal gecacht — nur mit Ciphertext, TTL 5 Minuten,
+Schreibzugriffe invalidieren den Cache-Eintrag und persistieren.
+
+| Variable | Bedeutung | Injektion im Deploy |
+|---|---|---|
+| `MCP_STATELESS_HTTP` | `false` (case-insensitive) stellt stateful HTTP wieder her; ungesetzt oder jeder andere Wert: stateless (Default) | Plain Env Var (`true`, Deploy-Workflow) |
 
 Deployen nur nach grüner Verifikation desselben Commits. Rollback: `workflow_dispatch`
 auf dem letzten guten Commit oder `gcloud run services update-traffic` auf die
@@ -255,4 +279,5 @@ des `ci`-Workflows als Required Checks festlegen, direkte Pushes blockieren, Aut
 erlauben (macht auch das Dependabot-Auto-Merge erst wirksam).
 
 Der Server lauscht auf `$PORT` (Cloud Run Standard) und nutzt standardmäßig den
-Streamable-HTTP-Transport von FastMCP unter `/mcp`.
+Streamable-HTTP-Transport von FastMCP unter `/mcp` — im stateless-Modus (siehe
+„Startup-Probe und stateless HTTP“).

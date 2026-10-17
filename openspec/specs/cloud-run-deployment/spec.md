@@ -46,3 +46,26 @@ The project documentation SHALL describe the deployment pipeline, including the 
 
 - **WHEN** a contributor reads the project documentation
 - **THEN** they find the recorded one-time setup steps and the automated pipeline description sufficient to understand how deploys reach Cloud Run
+
+### Requirement: Startup probe gates traffic on the health endpoint
+
+The deployment SHALL configure a Cloud Run startup probe for the service that sends HTTP GET requests to `/healthz` on the container port, with probe timing that allows a Python cold start (module imports and server bind) to complete. While an instance's startup probe has not succeeded, incoming requests SHALL be held by the platform instead of being routed to the instance.
+
+#### Scenario: Cold start stalls the request instead of erroring
+
+- **WHEN** a new instance is starting and a client request arrives at the service
+- **THEN** the platform holds the request until the startup probe succeeds and then serves it, instead of the client receiving an error response from a non-ready instance
+
+#### Scenario: Failing startup probe blocks the deployment
+
+- **WHEN** a new revision's startup probe does not succeed during deployment
+- **THEN** the deployment fails and the previously deployed revision keeps serving
+
+### Requirement: Stateless HTTP activation is delivered to the deployment
+
+The deployment SHALL deliver the stateless HTTP configuration to the service as a plain environment variable `MCP_STATELESS_HTTP` set to `true`, so the deployed service runs the HTTP transport in stateless mode by explicit configuration.
+
+#### Scenario: Deployed service runs stateless HTTP
+
+- **WHEN** the deployment delivers `MCP_STATELESS_HTTP=true` to the service
+- **THEN** the service serves HTTP requests in stateless mode

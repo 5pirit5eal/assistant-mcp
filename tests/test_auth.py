@@ -13,6 +13,7 @@ from assistant_mcp.auth import (
     MCP_ALLOWED_EMAILS,
     MCP_BASE_URL,
     MCP_OAUTH_STORAGE_KEY,
+    OAUTH_CACHE_TTL_SECONDS,
     OAUTH_ENV_VARS,
     AllowlistGoogleProvider,
     AllowlistTokenVerifier,
@@ -196,3 +197,95 @@ async def test_state_without_storage_key_is_unusable():
         collection="mcp-oauth-proxy-clients",
     )
     assert await rotated.get("client-1", collection="mcp-oauth-proxy-clients") is None
+
+
+class CountingStore(MemoryStore):
+    """In-memory store that counts backend read and write operations."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.reads = 0
+        self.writes = 0
+
+    async def get(self, key, *, collection=None):
+        self.reads += 1
+        return await super().get(key, collection=collection)
+
+    async def ttl(self, key, *, collection=None):
+        self.reads += 1
+        return await super().ttl(key, collection=collection)
+
+    async def put(self, key, value, *, collection=None, ttl=None):
+        self.writes += 1
+        return await super().put(key, value, collection=collection, ttl=ttl)
+
+
+async def test_cache_serves_repeated_reads_with_one_backend_read():
+    backend = CountingStore()
+    cache = MemoryStore()
+    storage = build_client_storage(_fernet(FERNET_KEY), backend, cache=cache)
+    await storage.put(
+        "client-1",
+        {"client_secret_token": "top-secret-token-material"},
+        collection="mcp-oauth-proxy-clients",
+    )
+    first = await storage.get("client-1", collection="mcp-oauth-proxy-clients")
+    second = await storage.get("client-1", collection="mcp-oauth-proxy-clients")
+    assert first == {"client_secret_token": "top-secret-token-material"}
+    assert second == {"client_secret_token": "top-secret-token-material"}
+    assert backend.reads <= 1
+    assert backend.writes == 1
+
+
+async def test_cache_write_persists_and_invalidates():
+    backend = CountingStore()
+    cache = MemoryStore()
+    storage = build_client_storage(_fernet(FERNET_KEY), backend, cache=cache)
+    await storage.put(
+        "client-1",
+        {"client_secret_token": "first-value"},
+        collection="mcp-oauth-proxy-clients",
+    )
+    assert await storage.get("client-1", collection="mcp-oauth-proxy-clients") == {
+        "client_secret_token": "first-value"
+    }
+    await storage.put(
+        "client-1",
+        {"client_secret_token": "second-value"},
+        collection="mcp-oauth-proxy-clients",
+    )
+    assert await storage.get("client-1", collection="mcp-oauth-proxy-clients") == {
+        "client_secret_token": "second-value"
+    }
+    assert backend.writes == 2
+
+
+async def test_cache_holds_no_plaintext_token_material():
+    backend = CountingStore()
+    cache = MemoryStore()
+    storage = build_client_storage(_fernet(FERNET_KEY), backend, cache=cache)
+    await storage.put(
+        "client-1",
+        {"client_secret_token": "top-secret-token-material"},
+        collection="mcp-oauth-proxy-clients",
+    )
+    await storage.get("client-1", collection="mcp-oauth-proxy-clients")
+    cached = await cache.get("client-1", collection="mcp-oauth-proxy-clients")
+    assert cached is not None
+    assert "top-secret-token-material" not in json.dumps(cached)
+    assert "__encrypted_data__" in cached
+
+
+async def test_cache_entries_expire_within_oauth_cache_ttl():
+    backend = CountingStore()
+    cache = MemoryStore()
+    storage = build_client_storage(_fernet(FERNET_KEY), backend, cache=cache)
+    await storage.put(
+        "client-1",
+        {"client_secret_token": "top-secret-token-material"},
+        collection="mcp-oauth-proxy-clients",
+    )
+    await storage.get("client-1", collection="mcp-oauth-proxy-clients")
+    _, ttl = await cache.ttl("client-1", collection="mcp-oauth-proxy-clients")
+    assert ttl is not None
+    assert 0 < ttl <= OAUTH_CACHE_TTL_SECONDS

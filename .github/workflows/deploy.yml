@@ -117,8 +117,9 @@ jobs:
           region: europe-west1
           project_id: rubenschulze-sandbox
           image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
-          env_vars: MCP_TRANSPORT=http,MCP_BASE_URL=${{ env.MCP_BASE_URL }},MCP_ALLOWED_EMAILS=${{ vars.MCP_ALLOWED_EMAILS }}
+          env_vars: MCP_TRANSPORT=http,MCP_BASE_URL=${{ env.MCP_BASE_URL }},MCP_ALLOWED_EMAILS=${{ vars.MCP_ALLOWED_EMAILS }},MCP_STATELESS_HTTP=true
           flags: >-
             --allow-unauthenticated
             --service-account=assistant-mcp-runtime@rubenschulze-sandbox.iam.gserviceaccount.com
             --set-secrets=GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,MCP_OAUTH_STORAGE_KEY=mcp-oauth-storage-key:latest
+            --startup-probe=httpGet.path=/healthz,httpGet.port=8080,initialDelaySeconds=0,periodSeconds=1,timeoutSeconds=1,failureThreshold=60

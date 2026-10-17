@@ -10,7 +10,9 @@ from fastmcp.server.auth.providers.google import GoogleProvider
 from google.cloud.firestore_v1.base_client import DEFAULT_DATABASE as FIRESTORE_DEFAULT_DATABASE
 from key_value.aio.protocols import AsyncKeyValue
 from key_value.aio.stores.firestore import FirestoreStore
+from key_value.aio.stores.memory import MemoryStore
 from key_value.aio.wrappers.encryption import FernetEncryptionWrapper
+from key_value.aio.wrappers.passthrough_cache import PassthroughCacheWrapper
 from pydantic import AnyHttpUrl, ValidationError
 
 GOOGLE_CLIENT_ID = "GOOGLE_CLIENT_ID"
@@ -18,6 +20,8 @@ GOOGLE_CLIENT_SECRET = "GOOGLE_CLIENT_SECRET"
 MCP_BASE_URL = "MCP_BASE_URL"
 MCP_ALLOWED_EMAILS = "MCP_ALLOWED_EMAILS"
 MCP_OAUTH_STORAGE_KEY = "MCP_OAUTH_STORAGE_KEY"
+
+OAUTH_CACHE_TTL_SECONDS = 300
 
 OAUTH_ENV_VARS = (
     GOOGLE_CLIENT_ID,
@@ -32,20 +36,36 @@ class AuthConfigError(RuntimeError):
     """Raised at startup when the OAuth configuration is incomplete or invalid."""
 
 
-def build_client_storage(fernet: Fernet, backend: AsyncKeyValue | None = None) -> AsyncKeyValue:
-    """Build the encrypted storage for the OAuth state.
+def build_client_storage(
+    fernet: Fernet,
+    backend: AsyncKeyValue | None = None,
+    cache: AsyncKeyValue | None = None,
+) -> AsyncKeyValue:
+    """Build the encrypted, cached storage for the OAuth state.
 
     Values are encrypted with the given Fernet key before they reach the
-    backend, so no plaintext token material is persisted. Decryption failures
-    are treated as absent entries, so key rotation forces re-registration
-    instead of failing hard. The default backend is Google Firestore's
-    ``(default)`` database — its free tier does not apply to named databases —
-    resolved through Application Default Credentials.
+    cache or the backend, so neither ever holds plaintext token material.
+    Reads are served from an in-process cache while a cached entry has not
+    expired (up to ``OAUTH_CACHE_TTL_SECONDS``), to minimize database
+    operations; writes invalidate the cached entry and persist to the
+    backend. Decryption failures are treated as absent entries, so key
+    rotation forces re-registration instead of failing hard. The default
+    backend is Google Firestore's ``(default)`` database — its free tier
+    does not apply to named databases — resolved through Application
+    Default Credentials. ``backend`` and ``cache`` override the
+    persistence backend and the in-process cache store for tests.
     """
     if backend is None:
         backend = FirestoreStore(database=FIRESTORE_DEFAULT_DATABASE)
+    if cache is None:
+        cache = MemoryStore(max_entries_per_collection=1000)
     return FernetEncryptionWrapper(
-        key_value=backend,
+        key_value=PassthroughCacheWrapper(
+            primary_key_value=backend,
+            cache_key_value=cache,
+            maximum_ttl=OAUTH_CACHE_TTL_SECONDS,
+            missing_ttl=OAUTH_CACHE_TTL_SECONDS,
+        ),
         fernet=fernet,
         raise_on_decryption_error=False,
     )

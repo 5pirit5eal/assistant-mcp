@@ -1,6 +1,132 @@
-from fastmcp import Client
+import ast
+import base64
+import io
+from pathlib import Path
 
+from fastmcp import Client
+from pypdf import PdfReader
+
+from assistant_mcp.server import build_server
 from assistant_mcp.toolsets import TOOLSETS
+
+TOOLSETS_SRC_DIR = Path(__file__).parent.parent / "src" / "assistant_mcp" / "toolsets"
+MUTATING_METHODS = frozenset(
+    {"append", "extend", "add", "update", "pop", "setdefault", "remove", "insert", "clear"}
+)
+
+
+def _bound_names(target: ast.expr) -> set[str]:
+    if isinstance(target, ast.Name):
+        return {target.id}
+    if isinstance(target, ast.Tuple | ast.List):
+        return {name for element in target.elts for name in _bound_names(element)}
+    if isinstance(target, ast.Starred):
+        return _bound_names(target.value)
+    return set()
+
+
+def _module_level_names(module: ast.Module) -> set[str]:
+    names: set[str] = set()
+    for node in module.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                names.update(_bound_names(target))
+        elif isinstance(node, ast.AnnAssign | ast.AugAssign):
+            names.update(_bound_names(node.target))
+        elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            names.add(node.name)
+        elif isinstance(node, ast.Import | ast.ImportFrom):
+            for alias in node.names:
+                names.add(alias.asname or alias.name.split(".")[0])
+        elif isinstance(node, ast.For | ast.AsyncFor):
+            names.update(_bound_names(node.target))
+    return names
+
+
+def _is_attribute_on_module_name(target: ast.expr, module_names: set[str]) -> bool:
+    return (
+        isinstance(target, ast.Attribute)
+        and isinstance(target.value, ast.Name)
+        and target.value.id in module_names
+    )
+
+
+def _statelessness_violations(source: str) -> list[str]:
+    """Describe the statelessness violations in ``source``, if any.
+
+    Detects global statements, module-level augmented assignment, mutating
+    method calls on module-level names, and attribute assignment on
+    module-level names (the violation classes of design decision D4).
+    """
+    module = ast.parse(source)
+    module_names = _module_level_names(module)
+    violations: list[str] = []
+    for node in ast.walk(module):
+        if isinstance(node, ast.Global):
+            violations.append(f"global statement ({', '.join(node.names)})")
+        elif isinstance(node, ast.Assign | ast.AnnAssign):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                if _is_attribute_on_module_name(target, module_names):
+                    violations.append(
+                        f"attribute assignment on module-level name ({ast.unparse(target)})"
+                    )
+        elif isinstance(node, ast.Call):
+            func = node.func
+            if (
+                isinstance(func, ast.Attribute)
+                and func.attr in MUTATING_METHODS
+                and isinstance(func.value, ast.Name)
+                and func.value.id in module_names
+            ):
+                violations.append(
+                    f"mutating method call on module-level name ({ast.unparse(func)})"
+                )
+    for node in module.body:
+        if isinstance(node, ast.AugAssign):
+            violations.append(
+                f"augmented assignment to module-level name ({ast.unparse(node.target)})"
+            )
+    return violations
+
+
+SYNTHETIC_VIOLATING_SOURCE = '''
+_CONSTANT_LIST = []
+_CONSTANT_DICT = {}
+_CONSTANT_OBJECT = object()
+_COUNTER = 0
+_TOP_LEVEL = []
+
+
+def misbehave() -> None:
+    global _COUNTER
+    _COUNTER += 1
+    _CONSTANT_LIST.append("value")
+    _CONSTANT_DICT.update({"key": "value"})
+    _CONSTANT_OBJECT.attribute = "value"
+
+
+_TOP_LEVEL += ["entry"]
+'''
+
+
+def test_scanner_rejects_synthetic_violating_module():
+    violations = _statelessness_violations(SYNTHETIC_VIOLATING_SOURCE)
+    assert any("global statement" in violation for violation in violations)
+    assert any("augmented assignment" in violation for violation in violations)
+    assert any("mutating method call" in violation for violation in violations)
+    assert any("attribute assignment" in violation for violation in violations)
+
+
+def test_toolset_modules_hold_no_module_level_mutable_state():
+    module_paths = sorted(TOOLSETS_SRC_DIR.glob("*.py"))
+    assert module_paths, f"no toolset modules found under {TOOLSETS_SRC_DIR}"
+    findings = []
+    for path in module_paths:
+        violations = _statelessness_violations(path.read_text())
+        if violations:
+            findings.append(f"{path.name}: " + "; ".join(violations))
+    assert not findings, "toolset modules hold cross-request state: " + " | ".join(findings)
 
 
 async def test_no_bootstrap_tools_offered():
@@ -40,3 +166,20 @@ async def test_registry_compliance_tool_parameters_and_outputs():
                 f"tool {tool.name!r} in toolset {name!r} "
                 f"returns a plain unstructured string"
             )
+
+
+DETERMINISM_MARKDOWN = "# Determinism Probe\n\nFirst paragraph.\n\n- item one\n- item two\n"
+
+
+async def test_two_server_instances_return_identical_tool_results(cleared_oauth_env):
+    extracted_texts = []
+    for _ in range(2):
+        server = build_server()
+        async with Client(server) as client:
+            result = await client.call_tool("pdf_generate_pdf", {"text": DETERMINISM_MARKDOWN})
+        assert not result.is_error
+        pdf = base64.b64decode(result.content[0].resource.blob)
+        reader = PdfReader(io.BytesIO(pdf))
+        extracted_texts.append("\n".join(page.extract_text() or "" for page in reader.pages))
+    assert "Determinism Probe" in extracted_texts[0]
+    assert extracted_texts[0] == extracted_texts[1]
