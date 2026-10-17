@@ -2,10 +2,11 @@
 
 from fastmcp import FastMCP
 
-from . import pdf
+from . import docx, pdf
 
 TOOLSETS: dict[str, FastMCP] = {
     "pdf": pdf.mcp,
+    "docx": docx.mcp,
 }
 
 __all__ = ["TOOLSETS"]
