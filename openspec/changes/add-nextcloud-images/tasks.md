@@ -9,12 +9,12 @@
 - [ ] 2.1 Write failing tests for a credential storage helper that stores/loads Nextcloud credentials encrypted under an identity key (use an in-memory backend), including the "no credentials stored" and "other user's credentials not readable" cases; verify the tests fail for the expected reason
 - [ ] 2.2 Implement the credential storage helper (Fernet-wrapped Firestore-compatible store, separate collection constant, reusing the `build_client_storage` pattern) and verify the tests from 2.1 pass
 
-## 3. Identity resolution
-- [ ] 3.1 Write failing tests for the identity resolution order (token email claim wins, then explicit `user_id`, else ToolError) via the public tool interface with a mocked auth context; verify they fail for the expected reason
-- [ ] 3.2 Implement identity resolution in the nextcloud toolset module and verify the tests from 3.1 pass
+## 3. Credential resolution
+- [ ] 3.1 Write failing tests for credential resolution: token email claim keys stored credentials when authenticated; single-account environment variables are used when unauthenticated and ignored when authenticated; partial env configuration and missing credentials both yield clear errors; verify they fail for the expected reason
+- [ ] 3.2 Implement credential resolution in the nextcloud toolset module (identity key from `get_access_token()` email claim, env-var fallback constants, no storage-key parameter on any tool) and verify the tests from 3.1 pass
 
 ## 4. Credential setup tool
-- [ ] 4.1 Write failing tests through `fastmcp.Client` for `save_nextcloud_credentials`: valid credentials (mocked WebDAV accepts) are stored and reported; invalid credentials (mocked 401) are not stored and reported as failure; verify they fail for the expected reason
+- [ ] 4.1 Write failing tests through `fastmcp.Client` for `save_nextcloud_credentials`: valid credentials (mocked WebDAV accepts) are stored under the caller's identity and reported; invalid credentials (mocked 401) are not stored and reported as failure; calling it without an authenticated identity yields a clear error; verify they fail for the expected reason
 - [ ] 4.2 Implement `save_nextcloud_credentials` (validation listing before persistence, pydantic model output, annotated parameters with examples) and verify the tests from 4.1 pass
 
 ## 5. Listing and download tools
@@ -27,7 +27,7 @@
 - [ ] 6.2 Verify the full suite (`uv run pytest`), `uv run ruff check .`, and `uv run mypy src` pass with the new toolset mounted
 
 ## 7. Documentation
-- [ ] 7.1 Document the nextcloud toolset in `README.md` (tools overview, credential setup flow with Hetzner Storage Share app-password instructions, identity/user_id behavior) and verify documented steps match the implemented tools
+- [ ] 7.1 Document the nextcloud toolset in `README.md` (tools overview, credential setup flow with Hetzner Storage Share app-password instructions, identity-keyed storage and the stdio env-var fallback) and verify documented steps match the implemented tools
 - [ ] 7.2 Update `AGENTS.md`: remove the "in-tool use of the authenticated identity" deferred note for the parts this change delivers and verify the statement matches the implementation
 
 ## Workflow follow-up

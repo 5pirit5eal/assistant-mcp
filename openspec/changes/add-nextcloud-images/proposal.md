@@ -24,8 +24,10 @@ account, with credentials never exposed in tool parameters or logs.
   `(default)` database, keyed by the authenticated Google identity (email
   claim from `get_access_token()`), reusing the encrypted-storage pattern
   from the OAuth layer.
-- Support an explicit `user_id` parameter as the storage key when no
-  authenticated identity is available (e.g. stdio transport without OAuth).
+- For the unauthenticated stdio transport, support a single-account fallback
+  via environment variables (WebDAV URL, username, app password) instead of
+  any per-call identity parameter; no tool parameter can override the
+  storage key, so cross-user access is impossible.
 - Add `webdavclient3` as a direct dependency; WebDAV calls run in a thread
   because the library is synchronous.
 - No changes to existing toolsets or the auth layer itself; the toolset only
@@ -55,8 +57,10 @@ account, with credentials never exposed in tool parameters or logs.
 - **Dependencies**: `webdavclient3` added to `pyproject.toml` and `uv.lock`;
   Docker build must be re-verified per AGENTS.md.
 - **Systems**: Google Firestore `(default)` database gains a new collection
-  for encrypted Nextcloud credentials; no new environment variables required
-  (existing `MCP_OAUTH_STORAGE_KEY` Fernet key is reused for encryption).
+  for encrypted Nextcloud credentials; the existing `MCP_OAUTH_STORAGE_KEY`
+  Fernet key is reused for encryption. New environment variables for the
+  stdio single-account fallback (WebDAV URL, username, app password) are
+  documented in the README.
 - **Documentation surfaces**: `README.md` (new toolset section, credential
   setup guide, Hetzner Storage Share app-password instructions), `AGENTS.md`
   (remove the "in-tool use of the authenticated identity" deferred note once

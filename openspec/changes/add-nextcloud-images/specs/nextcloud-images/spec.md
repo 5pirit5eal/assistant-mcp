@@ -27,10 +27,12 @@ their own stored credentials.
   identity key, never another user's
 
 ### Requirement: Identity resolution for the storage key
-The system SHALL derive the credential storage key from the authenticated
-identity of the caller when one is available. When no authenticated
-identity is available, the system SHALL use an explicitly supplied user
-identifier as the storage key.
+The system SHALL derive the credential storage key exclusively from the
+authenticated identity of the caller. Tools MUST NOT accept any parameter
+that selects or overrides the storage key. When the service runs without an
+authenticated identity (for example the stdio transport), the system SHALL
+instead use credentials supplied through environment configuration for a
+single account.
 
 #### Scenario: Authenticated identity keys the record
 - **WHEN** a caller with a valid OAuth access token saves or uses Nextcloud
@@ -38,18 +40,37 @@ identifier as the storage key.
 - **THEN** the credentials are stored and retrieved under a key derived
   from the token's email claim
 
-#### Scenario: Explicit user identifier without authentication
-- **WHEN** the service runs without an authenticated identity (for example
-  the stdio transport) and the caller supplies the user identifier
-  parameter
-- **THEN** the credentials are stored and retrieved under that supplied
-  identifier
-
-#### Scenario: No identity and no identifier
-- **WHEN** no authenticated identity is available and no user identifier is
-  supplied to a tool that requires stored credentials
+#### Scenario: No identity and no environment credentials
+- **WHEN** the service runs without an authenticated identity and without
+  the single-account environment configuration, and a caller invokes a tool
+  that requires credentials
 - **THEN** the tool call fails with a clear error telling the caller to
-  authenticate or supply the user identifier
+  authenticate or configure the single-account environment variables
+
+### Requirement: Single-account fallback via environment configuration
+The system SHALL support a single-account credential configuration through
+environment variables (WebDAV URL, username, app password) used only when
+no authenticated identity is available. This configuration MUST NOT be used
+when the caller is authenticated, and it MUST NOT grant access to any
+other user's stored credentials.
+
+#### Scenario: stdio mode uses environment credentials
+- **WHEN** the service runs on the stdio transport with the single-account
+  environment variables set and a caller lists or downloads images
+- **THEN** the tools operate against the Nextcloud account given by the
+  environment configuration
+
+#### Scenario: Environment credentials ignored when authenticated
+- **WHEN** a caller with a valid OAuth access token invokes a tool while the
+  single-account environment variables are also set
+- **THEN** the tool uses the credentials stored under the caller's
+  identity, not the environment credentials
+
+#### Scenario: Partial environment configuration is rejected
+- **WHEN** the service starts with some but not all of the single-account
+  environment variables set
+- **THEN** the service reports the incomplete configuration and refuses to
+  use the fallback credentials
 
 ### Requirement: Validated credential setup
 The system SHALL provide a tool that saves the caller's Nextcloud
@@ -111,10 +132,10 @@ file result.
 
 ### Requirement: No stored credentials
 Tools that need stored credentials SHALL fail with a clear error when no
-credentials are stored for the resolved storage key.
+credentials are available for the resolved caller.
 
 #### Scenario: Listing without stored credentials
-- **WHEN** a user calls a listing or download tool and no credentials are
-  stored under their storage key
+- **WHEN** an authenticated user calls a listing or download tool and no
+  credentials are stored under their identity key
 - **THEN** the tool call fails with a clear error directing the user to
   save their credentials first

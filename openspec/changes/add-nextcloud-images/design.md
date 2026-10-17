@@ -17,7 +17,7 @@ standard Nextcloud WebDAV; per-user auth uses an app password (not OAuth).
 
 **Goals:**
 - User-specific credential storage, encrypted, keyed by authenticated
-  identity with an explicit `user_id` fallback
+  identity with an environment-variable fallback
 - Live-validated credential setup, image listing (incl. mounted shares),
   image download as file result
 - Toolset follows the repo's tool-interface contract (annotated flat
@@ -48,13 +48,22 @@ Alternative considered: a second Fernet key env var — rejected, no
 additional security benefit for this data class and it complicates the
 activation contract.
 
-### 3. Identity resolution order: token claim, then explicit `user_id`
-Tools resolve the storage key as: `get_access_token()` email claim (lowercased)
-if present, else the explicit `user_id` parameter, else a clear ToolError.
-This keeps the stdio/no-auth path usable and never exposes another user's
-credentials, since an authenticated caller always wins over the parameter.
-Alternative considered: `user_id` only — rejected as it allows reading
-foreign credentials in the authenticated case.
+### 3. Credential resolution order: token claim, then env-var fallback
+Tools resolve credentials as: if an authenticated identity exists, load the
+credentials stored under the `get_access_token()` email claim (lowercased);
+otherwise use the single-account credentials from environment variables
+(constants: WebDAV URL, username, app password). Tools expose no parameter
+that selects or overrides the storage key — any per-call identity parameter
+would allow cross-user credential access and is deliberately excluded.
+Environment credentials are ignored when the caller is authenticated.
+Alternative considered: explicit `user_id` parameter as storage key —
+rejected by the user because it enables cross-user access.
+
+### 3a. Single-account fallback via environment variables
+For stdio (no OAuth identity), three env vars supply one account's
+credentials: URL, username, app password. Partial configuration is a
+startup/config error naming the missing variables (mirroring the
+`create_auth_provider` all-or-nothing pattern).
 
 ### 4. `webdavclient3` as the WebDAV client
 User-confirmed choice. New direct dependency; its synchronous,
@@ -73,12 +82,12 @@ operation (listing the root, `Depth: 0`) before writing to Firestore;
 gives immediate feedback.
 
 ### 6. Tool surface
-- `save_nextcloud_credentials(webdav_url, username, app_password, user_id?)`
-  → pydantic model (status)
-- `list_files(path, user_id?)` → pydantic model (list of entries:
-  name, path, is_folder, content_type, size)
-- `download_image(path, user_id?)` → `File` result (original bytes,
-  image media type)
+- `save_nextcloud_credentials(webdav_url, username, app_password)`
+  → pydantic model (status); only usable with an authenticated identity
+  (env-var fallback needs no saving)
+- `list_files(path)` → pydantic model (list of entries: name, path,
+  is_folder, content_type, size)
+- `download_image(path)` → `File` result (original bytes, image media type)
 Image format filtering via a module-level constant tuple (repo rule:
 cross-module strings as named constants). All parameters annotated with
 `Annotated[...]` + `Field` with description and example per
@@ -98,6 +107,9 @@ cross-module strings as named constants). All parameters annotated with
 - [Hetzner WebDAV quirks (redirects, URL encoding of spaces/umlauts in
   paths)] → webdavclient3 normalizes paths; error mapping treats 404 as
   not-found ToolError, 401/403 as credential failure
+- [Env-var fallback bypasses per-user isolation by design] → only for the
+  explicitly single-account stdio deployment; no parameter path can combine
+  an authenticated identity with foreign stored credentials
 
 ## Migration Plan
 
