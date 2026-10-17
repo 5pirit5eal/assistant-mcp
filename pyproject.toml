@@ -10,6 +10,7 @@ dependencies = [
     "markdown-it-py>=3.0.0",
     "pydantic>=2",
     "reportlab>=4.2.0",
+    "webdavclient3>=3.14.7",
 ]
 
 [project.scripts]
@@ -50,3 +51,7 @@ asyncio_mode = "auto"
 
 [tool.mypy]
 python_version = "3.14"
+
+[[tool.mypy.overrides]]
+module = "webdav3.*"
+ignore_missing_imports = true

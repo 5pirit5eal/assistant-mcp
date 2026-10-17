@@ -1,11 +1,11 @@
-# Spec Delta
+# nextcloud-images Specification
 
 ## Purpose
 Lets the assistant access image files on the user's Nextcloud (Hetzner
 Storage Share) via WebDAV with per-user credentials stored encrypted and
 keyed by the authenticated identity.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: User-specific credential storage
 The system SHALL store each user's Nextcloud credentials (WebDAV URL,
@@ -91,17 +91,37 @@ SHALL report the validation failure to the caller.
 - **THEN** no credentials are persisted and the tool reports the validation
   failure
 
-### Requirement: Image listing including shares
+### Requirement: Image listing with metadata and thumbnails
 The system SHALL provide a tool that lists the image files available to the
 user's Nextcloud account in a given path, including files reachable through
-folders and shares mounted in that account. Entries MUST identify whether
-each item is a file or a folder and expose the file name and path needed to
-download it.
+folders and shares mounted in that account. Each entry MUST identify
+whether the item is a file or a folder and SHALL expose the file's WebDAV
+metadata from the PROPFIND response (file id, name, path, content type,
+size, last-modified date, permissions, owner) and the delivered preview
+availability: an entry's preview availability is true exactly when the
+tool result includes a thumbnail for that entry. For each listed image
+file with an available preview, the tool SHALL also return a thumbnail
+image in the same tool result, correlated to its metadata entry by list
+order. A missing or failed preview MUST NOT fail the listing.
 
 #### Scenario: List images in a folder
 - **WHEN** a user lists a path that contains image files and subfolders
-- **THEN** the tool returns the image files with name and path, marked as
-  files, and the subfolders, marked as folders
+- **THEN** the tool returns the image files with their metadata (file id,
+  name, path, content type, size, last-modified date, permissions, owner,
+  and preview availability), marked as files, and the subfolders, marked
+  as folders
+
+#### Scenario: Thumbnails accompany image entries
+- **WHEN** the listing returns an image file whose preview is available on
+  the Nextcloud
+- **THEN** the tool result contains a thumbnail image for that file,
+  correlated to the file's metadata entry by list order
+
+#### Scenario: No preview available
+- **WHEN** the listing contains a file whose preview is unavailable or
+  whose preview request fails
+- **THEN** the file's metadata entry is returned without a thumbnail and
+  the listing succeeds
 
 #### Scenario: List images in a mounted share
 - **WHEN** a user lists a path that is part of a share mounted into their
@@ -114,16 +134,16 @@ download it.
 - **THEN** the tool call fails with a clear error that the path was not
   found
 
-### Requirement: Image download as file result
+### Requirement: Image download as image content
 The system SHALL provide a tool that downloads an image file from the
-user's Nextcloud and returns the original, unmodified binary content as a
-file result.
+user's Nextcloud and returns the original, unmodified binary content as an
+image result with the image's media type.
 
 #### Scenario: Download an image
 - **WHEN** a user downloads an image file path that exists in their
   Nextcloud
-- **THEN** the tool returns the unmodified file content as a file result
-  with the image's media type and file name
+- **THEN** the tool returns the unmodified file content as image content
+  with the image's media type
 
 #### Scenario: Download a non-existent image
 - **WHEN** a user downloads a path that does not exist in their Nextcloud

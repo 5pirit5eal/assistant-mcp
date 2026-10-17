@@ -26,7 +26,7 @@ Conduct a retrospective on an OpenSpec session. You are proposing improvements t
 
 2. **Collect findings from the session**
    Review what happened during the session and look for candidates in these categories, in this order of value:
-   - **AGENTS.md**: conventions and constraints the session revealed that future agents should follow but that are written nowhere. Navigation pointers to important files. Keep AGENTS.md sparse - only load-bearing rules and pointers, never prose.
+   - **AGENTS.md**: conventions and constraints the session revealed that future agents should follow but that are written nowhere. Navigation pointers to important files. Keep AGENTS.md minimal: only load-bearing rules and pointers, never prose, each phrased in the fewest full readable sentences.
    - **openspec/config.yaml**: rule gaps - would a `context`, `rules`, or `operations` entry have prevented a problem the session hit? Would an existing rule have been better worded? Are there no-op rules that modify nothing?
    - **Skills (.vibe/skills/)**: workflow gaps - did a skill guide the session into friction, miss a step, or produce an output that did not help? Only propose skill edits that would change future behavior.
    - **Automated checks before prose**: if the session made a mistake an automated check (lint, test, validation) could catch, propose wiring the check instead of writing a rule. A rule that a linter could enforce should be a linter rule.
