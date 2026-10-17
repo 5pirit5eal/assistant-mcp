@@ -42,6 +42,12 @@ drive tools via `fastmcp.Client`. Verify with `uv run pytest`,
   diagrams are known follow-ups, deliberately out of scope of the
   pdf toolset change.
 
+## Deliberately deferred (docx toolset)
+
+- Reverse conversion (DOCX to Markdown/HTML), caller-configurable
+  styling, and CJK font support are known follow-ups, deliberately out
+  of scope of the add-docx-toolset change.
+
 ## Deliberately deferred (stateless startup probe)
 
 - Validating the startup-probe timing values (60 s budget, 1 s period)

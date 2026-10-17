@@ -5,10 +5,11 @@ from collections.abc import Mapping
 
 from fastmcp import FastMCP
 
-from . import nextcloud, pdf
+from . import docx, nextcloud, pdf
 
 TOOLSETS: dict[str, FastMCP] = {
     "pdf": pdf.mcp,
+    "docx": docx.mcp,
     "nextcloud": nextcloud.mcp,
 }
 
