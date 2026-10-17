@@ -33,6 +33,12 @@ and `uv run mypy src`.
   diagrams are known follow-ups, deliberately out of scope of the
   pdf toolset change.
 
+## Deliberately deferred (docx toolset)
+
+- Reverse conversion (DOCX to Markdown/HTML), caller-configurable
+  styling, and CJK font support are known follow-ups, deliberately out
+  of scope of the add-docx-toolset change.
+
 ## Deliberately deferred (Google OAuth)
 
 - In-tool use of the authenticated identity (`get_access_token()`,

@@ -10,6 +10,8 @@ src/assistant_mcp/
 ├── server.py        # Einstiegspunkt: FastMCP-Server, mountet alle Toolsets
 ├── toolsets/
 │   ├── __init__.py  # Toolset-Registry
+│   ├── docx.py      # DOCX-Toolset: Markdown/HTML-to-DOCX (pandoc)
+│   ├── docx_reference.docx  # Word-Theme des DOCX-Toolsets (mitgeliefert)
 │   └── pdf.py       # PDF-Toolset: Markdown-to-PDF und Office-to-PDF
 └── ...
 ```
@@ -17,6 +19,17 @@ src/assistant_mcp/
 Jedes Toolset ist ein eigenes Modul mit einer FastMCP-Instanz; neue Toolsets werden in
 `toolsets/__init__.py` registriert und automatisch vom Server gemountet. Das PDF-Toolset
 dient dabei als Referenzimplementierung.
+
+Das DOCX-Toolset (`convert_to_docx(content, format, title)`) konvertiert Markdown oder
+HTML (`format` = `"markdown"` oder `"html"`) per `pandoc` in ein einheitlich gestyltes
+Word-Dokument. Der optionale `title` wird als Title-Property der Datei gesetzt und als
+sichtbarer Titelblock gerendert. Bilder als Base64-Data-URI werden eingebettet;
+Remote-Bilder mit http(s)-URL werden während der Konversion vom Server abgerufen —
+nicht erreichbare Bilder werden durch ihre Beschreibung ersetzt, die Konversion
+schlägt nicht fehl. Das Styling (Überschriften in `#4472C4`, Tabellen mit schattierter
+Kopfzeile, Zellrändern und Zebra-Streifen) kommt aus der mitgelieferten Theme-Datei
+`docx_reference.docx` und ist für beide Eingabeformate identisch; sie wird per
+`scripts/build_docx_reference.py` aus pandocs Default-Referenzdokument regeneriert.
 
 ## Lokale Entwicklung
 
@@ -37,8 +50,11 @@ uv run mypy src                # Typ-Check
 
 - **host**: `ruff`, `mypy` und `pytest` auf Python 3.14 (via `setup-uv`, Cache aktiv).
 - **docker**: Baut das Container-Image und führt die komplette Testsuite *im Image*
-  aus — so laufen auch die `soffice`-gated Office-to-PDF-Tests wirklich (auf dem
-  Runner ohne LibreOffice wären sie Skips).
+  aus — so laufen auch die `soffice`- und `pandoc`-gated Tests wirklich (auf dem
+  Runner ohne LibreOffice/pandoc wären sie Skips). Das Image installiert neben
+  LibreOffice das offizielle, gepinnte pandoc-Release-Binary (3.12.1, GitHub
+  Release; Debian apt liefert nur 3.1.11.1, das für die klassischen Word-Listen-
+  Stile benötigte Verhalten ab 3.2 noch nicht hat).
 
 Pull-Requests veröffentlichen das Image nicht; gepusht wird ausschließlich im
 Deploy-Pipeline auf `main`.
