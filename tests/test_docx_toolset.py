@@ -498,6 +498,7 @@ async def test_conversion_failure_returns_error_and_server_recovers(monkeypatch)
     assert not follow_up.is_error
 
 
+@pytest.mark.skipif(PANDOC is None, reason="pandoc not available in this environment")
 async def test_conversion_timeout_returns_error(monkeypatch):
     def timing_out_run(cmd, **kwargs):
         raise subprocess.TimeoutExpired(cmd, timeout=kwargs.get("timeout"))
