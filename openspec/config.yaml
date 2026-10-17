@@ -78,6 +78,9 @@ operations:
         When an implementation legitimately deviates from a task's described
         mechanism, update the task wording (or add a superseding task) before
         checking it off, so checked text and delivered code agree.
+      - >-
+        When a change renames or removes a symbol referenced in AGENTS.md,
+        update the reference in the same change.
   archive:
     guidance:
       - >-
