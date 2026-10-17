@@ -38,3 +38,11 @@ and `uv run mypy src`.
 - In-tool use of the authenticated identity (`get_access_token()`,
   per-user downstream API calls) is a known follow-up, deliberately
   out of scope of the add-google-oauth change; tools ignore identity.
+
+## Deliberately deferred (stateless startup probe)
+
+- Validating the startup-probe timing values (60 s budget, 1 s period)
+  against the first real Cloud Run cold start is a known follow-up,
+  deliberately out of scope of the stateless-startup-probe change;
+  adjust the deploy workflow flags and the pinned deploy-config test
+  together.
