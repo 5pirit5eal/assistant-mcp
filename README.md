@@ -85,6 +85,9 @@ als ein einzelner Release-Commit auf `main` mit der Message
 `v<x.y.z>`-Tag und GitHub-Release. Die Konfiguration steht in `.releaserc`
 (conventionalcommits-Preset mit versteckten Nicht-Feature-Sektionen).
 Release-Läufe sind serialisiert (Concurrency-Gruppe `release`, kein Cancel).
+Commits ohne releasbaren Typ (`feat`/`fix`/`perf`, siehe `.releaserc`)
+schneiden kein Release — ein grüner Release-Lauf ohne veröffentlichtes
+Release ist für `ci:`/`chore:`-Änderungen der Normalfall.
 
 Das Release authentifiziert sich als GitHub App, damit die Release-Events die
 Deploy-Pipeline auslösen können (Events des normalen `GITHUB_TOKEN` triggern
