@@ -8,12 +8,12 @@ Defines how the assistant-mcp server is deployed to Google Cloud Run automatical
 
 ### Requirement: Automated deployment on main and on demand
 
-The system SHALL deploy to Google Cloud Run on every push to `main` and via a manual workflow trigger. A deployment MUST build the container image, publish it to the project's Artifact Registry repository in `europe-west1`, and roll it out to the Cloud Run service `assistant-mcp` in region `europe-west1` (project `rubenschulze-sandbox`) with unauthenticated ingress access allowed, `MCP_TRANSPORT=http` set, and the OAuth configuration injected: the Google client ID, client secret, and OAuth storage encryption key as environment variables sourced from Google Secret Manager, the public base URL of the service as a plain environment variable, and the account allowlist as a plain environment variable sourced from the repository's `MCP_ALLOWED_EMAILS` variable.
+The system SHALL deploy to Google Cloud Run when a full GitHub release is published from `main` and via a manual workflow trigger. A deployment MUST check out the release tag, build the container image, publish it to the project's Artifact Registry repository in `europe-west1` under both a release version tag and a commit SHA tag, and roll it out to the Cloud Run service `assistant-mcp` in region `europe-west1` (project `rubenschulze-sandbox`) with unauthenticated ingress access allowed, `MCP_TRANSPORT=http` set, and the OAuth configuration injected: the Google client ID, client secret, and OAuth storage encryption key as environment variables sourced from Google Secret Manager, the public base URL of the service as a plain environment variable, and the account allowlist as a plain environment variable sourced from the repository's `MCP_ALLOWED_EMAILS` variable.
 
 #### Scenario: Green push to main deploys
 
-- **WHEN** a push to `main` passes the full verification suite
-- **THEN** a new container image is published to Artifact Registry and deployed as a new Cloud Run revision that receives the OAuth configuration from Secret Manager
+- **WHEN** a push to `main` passes the full verification suite and its release is published
+- **THEN** the released revision's container image is published to Artifact Registry under both its version tag and commit SHA tag and deployed as a new Cloud Run revision that receives the OAuth configuration from Secret Manager
 
 #### Scenario: Manual trigger deploys the current main
 

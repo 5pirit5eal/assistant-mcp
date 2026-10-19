@@ -1,0 +1,65 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Validate the release chain without publishing
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for the CI run of this commit
+        if: github.event_name == 'push'
+        timeout-minutes: 30
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          while :; do
+            run_id=$(gh run list \
+              --workflow ci \
+              --event push \
+              --commit "$GITHUB_SHA" \
+              --json databaseId \
+              --jq '.[0].databaseId' 2>/dev/null) || run_id=""
+            [ -n "$run_id" ] && break
+            sleep 10
+          done
+          gh run watch "$run_id" --exit-status --interval 10
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v10.3.0
+      - name: Create GitHub App token
+        id: app_token
+        uses: actions/create-github-app-token@v3
+        with:
+          app_id: ${{ vars.RELEASE_APP_ID }}
+          private_key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permissions: "contents: write"
+      - name: Run semantic-release
+        uses: cycjimmy/semantic-release-action@v4.1.0
+        with:
+          semantic_version: "24.2.9"
+          extra_plugins: >-
+            @semantic-release/changelog@6.0.3
+            @semantic-release/git@10.0.1
+            @semantic-release/exec@6.0.3
+            conventional-changelog-conventionalcommits@10.3.0
+          dry_run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        env:
+          GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
