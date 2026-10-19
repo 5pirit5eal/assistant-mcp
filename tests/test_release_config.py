@@ -150,9 +150,11 @@ def test_checkout_fetches_full_history():
 
 def test_app_token_step_mints_contents_write_token():
     token = _steps_by_action()["actions/create-github-app-token"]
-    assert token["with"]["app_id"] == RELEASE_APP_ID
-    assert token["with"]["private_key"] == RELEASE_APP_PRIVATE_KEY
-    assert token["with"]["permissions"] == "contents: write"
+    with_config = token["with"]
+    assert with_config["app-id"] == RELEASE_APP_ID
+    assert with_config["private-key"] == RELEASE_APP_PRIVATE_KEY
+    assert with_config["permission-contents"] == "write"
+    assert set(with_config) == {"app-id", "private-key", "permission-contents"}
 
 
 def test_semantic_release_action_runs_pinned_plugin_chain():

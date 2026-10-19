@@ -53,9 +53,9 @@ jobs:
         id: app_token
         uses: actions/create-github-app-token@v3
         with:
-          app_id: ${{ vars.RELEASE_APP_ID }}
-          private_key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-          permissions: "contents: write"
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
       - name: Run semantic-release
         uses: cycjimmy/semantic-release-action@v4.1.0
         with:
