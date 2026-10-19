@@ -53,5 +53,4 @@ drive tools via `fastmcp.Client`. Verify with `uv run pytest`,
 - Validating the startup-probe timing values (60 s budget, 1 s period)
   against the first real Cloud Run cold start is a known follow-up,
   deliberately out of scope of the stateless-startup-probe change;
-  adjust the deploy workflow flags and the pinned deploy-config test
-  together.
+  adjust the deploy workflow flags together.
