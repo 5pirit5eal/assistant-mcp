@@ -17,6 +17,16 @@ builders keyed by complete credentials. Tests
 drive tools via `fastmcp.Client`. Verify with `uv run pytest`,
 `uv run ruff check .`, and `uv run mypy src`.
 
+## Commits
+
+Commit messages use the Conventional Commits types configured in
+`.releaserc`, which drives semantic-release versioning: `feat` releases
+a minor version, `fix` and `perf` a patch version, and a `BREAKING
+CHANGE:` footer (or `!`) a major version. `docs`, `style`, `chore`,
+`refactor`, `test`, `build`, and `ci` never trigger a release. When a
+change should ship to Cloud Run, commit it with a releasable type;
+non-releasable types deliberately stay undeployed.
+
 ## Verification
 
 - Dockerfile or dependency changes: `docker build` must succeed before the
