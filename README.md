@@ -56,17 +56,82 @@ uv run mypy src                # Typ-Check
   Release; Debian apt liefert nur 3.1.11.1, das für die klassischen Word-Listen-
   Stile benötigte Verhalten ab 3.2 noch nicht hat).
 
-Pull-Requests veröffentlichen das Image nicht; gepusht wird ausschließlich im
-Deploy-Pipeline auf `main`.
+Pull-Requests veröffentlichen das Image nicht; gebaut und gepusht wird
+ausschließlich in der Deploy-Pipeline, die durch veröffentlichte Releases
+ausgelöst wird (siehe „Release und Deployment auf Cloud Run“).
 
-## Deployment auf Cloud Run
+## Release und Deployment auf Cloud Run
 
-`.github/workflows/deploy.yml` deployt automatisch bei jedem Push auf `main` und per
-manueller Auslösung (`workflow_dispatch`):
+Die Pipeline folgt der Kette **Push auf `main` → `ci` + `release` →
+`released`-Event → `deploy`**: Ein Push auf `main` startet `ci` und parallel
+dazu `release`; `release` wartet auf den `ci`-Lauf desselben Commits und
+schneidet nur bei einem grünen Lauf ein GitHub-Release; das vollständige
+Release (`released`, keine Drafts/Pre-Releases) löst `deploy` aus. Jeder
+Deploy ist so auf eine veröffentlichte Version rückführbar.
 
-1. Verifikation des Commits (host-Checks und In-Image-Tests, identisch zu CI).
+### Release-Pipeline (semantic-release)
+
+`.github/workflows/release.yml` läuft bei jedem Push auf `main` (zusätzlich
+manuell per `workflow_dispatch`) und wartet vor dem Veröffentlichen auf den
+`ci`-Lauf desselben Commits (`gh run watch`, `--exit-status`): schlägt die
+Verifikation fehl, wird kein Release geschnitten. semantic-release
+leitet die Version aus Conventional Commits ab: `feat` → Minor, `fix` → Patch,
+Breaking Change → Major; `docs`/`style`/`chore`/`refactor`/`test`/`build`/`ci`
+lösen kein Release aus, ein Push ohne releasbare Commits produziert keins.
+Jedes Release schreibt `CHANGELOG.md`, bumpt die Version in `pyproject.toml`
+und `uv.lock` (per `uv version`, Plugin `@semantic-release/exec`) und landet
+als ein einzelner Release-Commit auf `main` mit der Message
+`chore(release): x.y.z [skip ci]` (löst keine weitere Pipeline aus), plus
+`v<x.y.z>`-Tag und GitHub-Release. Die Konfiguration steht in `.releaserc`
+(conventionalcommits-Preset mit versteckten Nicht-Feature-Sektionen).
+Release-Läufe sind serialisiert (Concurrency-Gruppe `release`, kein Cancel).
+
+Das Release authentifiziert sich als GitHub App, damit die Release-Events die
+Deploy-Pipeline auslösen können (Events des normalen `GITHUB_TOKEN` triggern
+nie andere Workflows). Einmalige Einrichtung nach Merge des Changes:
+
+1. **GitHub App anlegen** (GitHub → Settings → Developer settings → GitHub
+   Apps): Berechtigung **Contents: Read & write** setzen, App erstellen und
+   auf diesem Repository installieren.
+2. **App-Credentials hinterlegen** (der Workflow liest sie als
+   `vars.RELEASE_APP_ID` und `secrets.RELEASE_APP_PRIVATE_KEY`):
+
+   ```bash
+   gh variable set RELEASE_APP_ID \
+     --repo 5pirit5eal/assistant-mcp \
+     --body "<App-ID>"
+   gh secret set RELEASE_APP_PRIVATE_KEY \
+     --repo 5pirit5eal/assistant-mcp \
+     < "<private-key>.pem"
+   ```
+
+3. **Baseline-Tag `v0.1.0`** auf dem Merge-Commit setzen und pushen (passt zur
+   Version in `pyproject.toml`; das erste `feat`/`fix` released dann `v0.2.0`):
+
+   ```bash
+   git tag v0.1.0 <merge-commit>
+   git push origin v0.1.0
+   ```
+
+4. **Kette validieren**: den `release`-Workflow per `workflow_dispatch` mit
+   `dry_run: true` auslösen — prüft Token-Minting und Plugin-Kette, ohne zu
+   veröffentlichen.
+
+Bis App, Variable/Secret und Baseline-Tag existieren, deployt der Merge dieses
+Changes noch nichts; nach der Einrichtung reichen normale `feat`/`fix`-Merges
+aus, um Version und Deploy automatisch zu fahren.
+
+### Deployment auf Cloud Run
+
+`.github/workflows/deploy.yml` deployt automatisch bei jedem vollständigen
+GitHub-Release (`on: release: types: [released]`) und per manueller Auslösung
+(`workflow_dispatch`, dann ohne Release-Tag: Check out des Default-Branch-Heads):
+
+1. Check out des Release-Tags (`github.event.release.tag_name`) und Verifikation
+   desselben Commits (host-Checks und In-Image-Tests, identisch zu CI).
 2. WIF-Authentifizierung (GitHub-OIDC, kein Service-Account-Key in GitHub).
-3. Image-Build und Push nach Artifact Registry:
+3. Image-Build und Push nach Artifact Registry unter zwei Tags — der
+   Release-Version und dem ausgecheckten Commit-SHA (`git rev-parse HEAD`):
    `europe-west1-docker.pkg.dev/rubenschulze-sandbox/assistant-mcp/server`.
 4. Deploy des digest-gepinnten Images auf den Service `assistant-mcp` (Region
    `europe-west1`, `MCP_TRANSPORT=http`, unauthentifizierter Zugriff erlaubt)
@@ -99,9 +164,9 @@ Schreibzugriffe invalidieren den Cache-Eintrag und persistieren.
 |---|---|---|
 | `MCP_STATELESS_HTTP` | `false` (case-insensitive) stellt stateful HTTP wieder her; ungesetzt oder jeder andere Wert: stateless (Default) | Plain Env Var (`true`, Deploy-Workflow) |
 
-Deployen nur nach grüner Verifikation desselben Commits. Rollback: `workflow_dispatch`
-auf dem letzten guten Commit oder `gcloud run services update-traffic` auf die
-vorherige Revision.
+Gedeployt wird nur der verifizierte Release-Commit (Verifikation und Deploy im
+selben Workflow-Lauf). Rollback: `gcloud run services update-traffic` auf die
+vorherige Revision oder ein Re-Release des letzten guten Standes.
 
 Abhängigkeiten werden von [Dependabot](https://github.com/dependabot) überwacht
 (`uv`, `github-actions`, `docker`, wöchentlich). Patch- und Minor-Updates mergen per

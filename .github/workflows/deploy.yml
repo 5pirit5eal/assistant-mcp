@@ -1,8 +1,8 @@
 name: deploy
 
 on:
-  push:
-    branches: [main]
+  release:
+    types: [released]
   workflow_dispatch:
 
 permissions:
@@ -21,6 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
       - uses: astral-sh/setup-uv@v10.3.0
         with:
           enable-cache: true
@@ -35,6 +37,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
       - uses: docker/setup-buildx-action@v4
       - name: Build image (layer-cached)
         uses: docker/build-push-action@v7
@@ -54,13 +58,14 @@ jobs:
   deploy:
     name: Build, publish, and deploy to Cloud Run
     needs: [host, docker]
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || github.ref }}
       - name: Check Workload Identity provider variable
         env:
           WIF_PROVIDER: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
@@ -91,13 +96,18 @@ jobs:
           gcloud auth print-access-token |
           docker login -u oauth2accesstoken --password-stdin europe-west1-docker.pkg.dev
       - uses: docker/setup-buildx-action@v4
+      - name: Capture checked-out commit SHA
+        id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Build and push image
         id: build
         uses: docker/build-push-action@v7
         with:
           context: .
           push: true
-          tags: ${{ env.IMAGE }}:${{ github.sha }}
+          tags: >-
+            ${{ env.IMAGE }}:${{ github.event.release.tag_name || format('manual-{0}', steps.sha.outputs.sha) }},
+            ${{ env.IMAGE }}:${{ steps.sha.outputs.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Resolve public service URL
