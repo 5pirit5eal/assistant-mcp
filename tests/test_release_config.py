@@ -136,7 +136,10 @@ def test_release_waits_for_ci_before_publishing():
     assert wait["name"] == "Wait for the CI run of this commit"
     assert wait["if"] == "github.event_name == 'push'"
     assert wait["env"]["GH_TOKEN"] == "${{ github.token }}"
+    assert wait["env"]["GH_REPO"] == "${{ github.repository }}"
     assert wait["timeout-minutes"] == 30
+    assert "--jq '.[0].databaseId // empty'" in wait["run"]
+    assert "2>/dev/null" not in wait["run"]
 
 
 def test_checkout_fetches_full_history():
