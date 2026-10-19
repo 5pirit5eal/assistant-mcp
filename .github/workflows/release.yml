@@ -45,10 +45,6 @@ jobs:
           done
           echo "::error::No ci run found for commit $GITHUB_SHA after 30 minutes"
           exit 1
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: astral-sh/setup-uv@v10.3.0
       - name: Create GitHub App token
         id: app_token
         uses: actions/create-github-app-token@v3
@@ -56,6 +52,11 @@ jobs:
           app-id: ${{ vars.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
           permission-contents: write
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app_token.outputs.token }}
+      - uses: astral-sh/setup-uv@v10.3.0
       - name: Run semantic-release
         uses: cycjimmy/semantic-release-action@v4.1.0
         with:
