@@ -8,7 +8,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from .auth import create_auth_provider
-from .toolsets import TOOLSETS, validate_env_config
+from .toolsets import TOOLSETS
 
 MCP_STATELESS_HTTP = "MCP_STATELESS_HTTP"
 
@@ -32,7 +32,6 @@ def build_server(auth: AuthProvider | None = None) -> FastMCP:
     """
     if auth is None:
         auth = create_auth_provider()
-    validate_env_config()
     server = FastMCP(
         "assistant-mcp",
         instructions="Modular assistant MCP server.",

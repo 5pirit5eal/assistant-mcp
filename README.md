@@ -12,7 +12,6 @@ src/assistant_mcp/
 │   ├── __init__.py  # Toolset-Registry
 │   ├── docx.py      # DOCX-Toolset: Markdown/HTML-to-DOCX (pandoc)
 │   ├── docx_reference.docx  # Word-Theme des DOCX-Toolsets (mitgeliefert)
-│   ├── nextcloud.py # Nextcloud-Toolset: Bilder-Listing und -Download über WebDAV
 │   └── pdf.py       # PDF-Toolset: Markdown-to-PDF und Office-to-PDF
 └── ...
 ```
@@ -227,65 +226,6 @@ Rotation: neuen Fernet-Key ins Secret schreiben → neue Revision. Alte Einträg
 lassen sich dann nicht mehr entschlüsseln und werden als *fehlend* behandelt:
 Clients müssen sich neu registrieren und neu einloggen. Token-Material wird nie
 im Klartext exponiert — niemals durch die Rotation, auch nicht im Fehlerfall.
-
-## Nextcloud-Toolset (Bilder über WebDAV)
-
-Das `nextcloud`-Toolset greift per WebDAV auf die Bilder eines Nextcloud-Kontos zu
-(z. B. Hetzner Storage Share) und mountet drei Tools unter dem Namespace `nextcloud`:
-
-- `nextcloud_register_nextcloud_credentials` — validiert und speichert die WebDAV-Zugangsdaten
-  des Aufrufers (Validation vor Persistenz: abgelehnte Zugangsdaten werden nicht gespeichert).
-- `nextcloud_list_images` — listet in einem Pfad die Bilddateien und Unterordner auf,
-  mit den WebDAV-Metadaten je Eintrag (Name, Pfad, Content-Type, Größe, Datei-ID,
-  Änderungsdatum, Berechtigungen, Besitzer, `has_preview`). Für jede Bilddatei mit
-  verfügbarer Vorschau liefert das Ergebnis zusätzlich ein 256×256-Thumbnail als
-  Image-Content-Block — das k-te Thumbnail gehört zum k-ten Eintrag mit
-  `has_preview = true`. Fehlt eine Vorschau oder schlägt ihr Abruf fehl, wird der
-  Eintrag ohne Thumbnail zurückgegeben (`has_preview = false`); die Liste scheitert
-  daran nie. Dateien über eingehängte Freigaben (mounted shares) werden wie eigene
-  gelistet. Filter: `bmp, gif, heic, jpeg, jpg, png, tif, tiff, webp` plus alle Ordner.
-- `nextcloud_download_image` — lädt eine Bilddatei unverändert herunter und liefert
-  sie als Bild-Ergebnis (Image-Content) mit dem Bild-Media-Type zurück, damit das
-  Modell sie direkt ansehen kann.
-
-### Zugangsdaten pro Benutzer (identitätsbasiert)
-
-Jede authentifizierte Person speichert ihre eigenen Nextcloud-Zugangsdaten über
-`nextcloud_register_nextcloud_credentials`:
-
-1. **App-Passwort erzeugen** (Hetzner Storage Share): Nextcloud-Web-UI öffnen →
-   *Einstellungen → Sicherheit* → unter „Geräte & Sitzungen“ ein neues App-Passwort
-   erstellen (Name z. B. „assistant-mcp“). Das App-Passwort nur einmalig kopiert
-   anzeigen lassen.
-2. **WebDAV-URL notieren**: bei Hetzner Storage Share
-   `https://<instanz>.<subdomain>.your-storageshare.de/remote.php/dav`
-   (in den Nextcloud-Einstellungen unter *Einstellungen/Verwaltung → Teilen → WebDAV*).
-3. **Speichern**: das Tool mit `webdav_url`, `username` und `app_password` aufrufen.
-   Das Tool prüft die Zugangsdaten mit einem günstigen WebDAV-Request gegen die
-   Instanz, bevor etwas gespeichert wird; ungültige Zugangsdaten werden mit einer
-   Fehlermeldung abgelehnt und nicht persistiert.
-
-Die Zugangsdaten werden Fernet-verschlüsselt (derselbe Key wie der OAuth-State,
-`MCP_OAUTH_STORAGE_KEY`) in der Firestore-`(default)`-Datenbank gespeichert,
-in einer eigenen Collection (`nextcloud-credentials`). Der Speicher-Schlüssel ist
-die lowercased E-Mail-Adresse aus dem Google-Token des Aufrufers — kein Tool-Parameter
-kann den Schlüssel setzen oder überschreiben, daher erreicht jede Person nur ihr
-eigenes Nextcloud-Konto.
-
-### stdio-Fallback: ein Konto per Umgebungsvariablen
-
-Der lokale stdio-Transport läuft ohne OAuth-Identität. Dafür unterstützt das Toolset
-eine Einzelkonto-Konfiguration über drei Umgebungsvariablen — alle drei oder keiner:
-
-| Variable | Bedeutung |
-|---|---|
-| `NEXTCLOUD_WEBDAV_URL` | WebDAV-URL des Nextcloud (Storage Share), endet auf `/remote.php/dav` |
-| `NEXTCLOUD_USERNAME` | Nextcloud-Benutzername des Kontos |
-| `NEXTCLOUD_APP_PASSWORD` | App-Passwort aus der Nextcloud-Weboberfläche |
-
-Bei Teil-Konfiguration melden die Tools einen klaren Fehler mit den fehlenden
-Variablen. Authentifizierte Aufrufer (HTTP-Transport) ignorieren diese Variablen
-stets — gespeicherte Zugangsdaten gewinnen.
 
 ## Einmalige Einrichtung
 
