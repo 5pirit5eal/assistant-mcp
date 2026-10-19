@@ -13,7 +13,7 @@ combining both; plain strings are forbidden (enforced by
 outside a small text table — use `Image` for images. Helpers exchange
 pydantic models, not raw dicts or lists; pass primitives directly. Toolset
 modules hold no cross-request state, except `lru_cache`-wrapped client
-builders keyed by complete credentials (`build_webdav_client`). Tests
+builders keyed by complete credentials. Tests
 drive tools via `fastmcp.Client`. Verify with `uv run pytest`,
 `uv run ruff check .`, and `uv run mypy src`.
 
