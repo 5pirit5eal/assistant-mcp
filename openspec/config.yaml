@@ -9,6 +9,11 @@ rules:
       Test-Driven Development (TDD) is mandatory for every implementation
       task: write the failing test first, then only enough code to pass it.
     - >-
+      Configuration and workflow files (e.g. .github/workflows/*.yml,
+      .releaserc, Dockerfile) are exempt from the TDD requirement. They are
+      validated by review (manual or agent) and automated linters, not by
+      tests that assert their contents.
+    - >-
       For every task, declare whether it is parallelizable or blocked: group
       tasks that can be implemented independently of each other into a
       parallelizable batch, and state for each remaining task which tasks
