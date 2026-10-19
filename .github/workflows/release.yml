@@ -30,7 +30,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 180); do
+          for _ in $(seq 1 180); do
             run_id=$(gh run list \
               --workflow ci \
               --event push \
