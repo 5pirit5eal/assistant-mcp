@@ -27,19 +27,24 @@ jobs:
         timeout-minutes: 30
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          while :; do
+          for attempt in $(seq 1 180); do
             run_id=$(gh run list \
               --workflow ci \
               --event push \
               --commit "$GITHUB_SHA" \
               --json databaseId \
-              --jq '.[0].databaseId' 2>/dev/null) || run_id=""
-            [ -n "$run_id" ] && break
+              --jq '.[0].databaseId // empty')
+            if [ -n "$run_id" ]; then
+              gh run watch "$run_id" --exit-status --interval 10
+              exit 0
+            fi
             sleep 10
           done
-          gh run watch "$run_id" --exit-status --interval 10
+          echo "::error::No ci run found for commit $GITHUB_SHA after 30 minutes"
+          exit 1
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
