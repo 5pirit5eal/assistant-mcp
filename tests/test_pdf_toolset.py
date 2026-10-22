@@ -109,6 +109,68 @@ async def test_generate_pdf_markdown_code_block():
     assert "```" not in text
 
 
+async def test_generate_pdf_superscript_renders_raised():
+    md = "Der Satz von Pythagoras: a^2 + b^2 = c^2.\n"
+    result = await call_generate_pdf(md)
+    text = _pdf_text(result)
+    assert "a2 + b2 = c2" in text
+    assert "^" not in text
+
+    runs: list[tuple[str, float]] = []
+
+    def visitor(chunk, cm, tm, font_dict, font_size):
+        if chunk.strip():
+            runs.append((chunk, font_size))
+
+    _read_pdf(result).pages[0].extract_text(visitor_text=visitor)
+    body_sizes = [size for chunk, size in runs if "Pythagoras" in chunk]
+    sup_sizes = [size for chunk, size in runs if chunk == "2"]
+    assert body_sizes and sup_sizes
+    assert all(size < body for size in sup_sizes for body in body_sizes), runs
+
+
+async def test_generate_pdf_superscript_braced_group():
+    md = "Wachstum: 2^{n+1} Schritte.\n"
+    result = await call_generate_pdf(md)
+    text = _pdf_text(result)
+    assert "^" not in text
+    assert "{" not in text
+    assert "2n+1" in text
+
+
+async def test_generate_pdf_lone_caret_stays_literal():
+    md = "Checkpoint ^ erreicht, kein ^2 hier: nur ^{a} zählt.\n"
+    result = await call_generate_pdf(md)
+    text = _pdf_text(result)
+    assert "^ erreicht" in text
+    assert "^2" not in text
+    assert "^{" not in text
+
+
+async def test_generate_pdf_superscript_malformed_markers_stay_visible():
+    md = "Leer: x^{} Ende. Umlaut x^ä. Verschachtelt x^{a{b}}. Offen x^{n+1.\n"
+    result = await call_generate_pdf(md)
+    text = _pdf_text(result)
+    assert "^{}" in text
+    assert "^ä" in text
+    assert "x^{a{b}}" in text
+    assert "x^{n+1" in text
+
+
+async def test_generate_pdf_superscript_code_span_stays_literal():
+    md = "Code `x^2` bleibt literal.\n"
+    result = await call_generate_pdf(md)
+    text = _pdf_text(result)
+    assert "x^2" in text
+
+
+async def test_generate_pdf_superscript_escaped_markup_is_neutralized():
+    md = "Formel x^{<b>2</b>} Ende.\n"
+    result = await call_generate_pdf(md)
+    text = _pdf_text(result)
+    assert "x^{<b>2</b>}" in text
+
+
 async def test_generate_pdf_markdown_multipage():
     paragraph = "Absatz mit etwas Text. " * 20
     md = "\n\n".join([f"## Abschnitt {i}\n\n{paragraph}" for i in range(15)])

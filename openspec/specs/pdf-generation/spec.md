@@ -25,6 +25,16 @@ The `generate_pdf` tool of the `pdf` toolset MUST generate a valid PDF document 
 - **WHEN** `generate_pdf` is called with text containing German umlauts (ä, ö, ü, ß) and common special characters
 - **THEN** the generated PDF contains these characters correctly (no replacement or broken-glyph rendering)
 
+#### Scenario: Caret superscripts render raised
+
+- **WHEN** `generate_pdf` is called with text containing caret markers as used in math notation (`x^2`, `x^{n+1}`)
+- **THEN** the caret and any bracing do not appear in the output and the marked content renders as superscript (raised and in smaller glyphs than the surrounding body text)
+
+#### Scenario: Non-superscript carets stay literal
+
+- **WHEN** `generate_pdf` is called with text where a caret is followed by anything other than ASCII letters/digits or a braced group (punctuation, empty braces, nested or unclosed braces, non-ASCII characters), or where the caret appears inside a code span or code block
+- **THEN** the caret and the following content render as literal text without superscript formatting
+
 #### Scenario: Empty input
 
 - **WHEN** `generate_pdf` is called with empty text input
