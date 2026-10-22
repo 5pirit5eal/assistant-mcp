@@ -30,7 +30,7 @@ def fake_storage(monkeypatch):
     _UPLOADS.clear()
     monkeypatch.setenv(GCS_BUCKET_ENV, TEST_BUCKET)
 
-    def fake_upload(data: bytes, object_name: str, content_type: str) -> str:
+    async def fake_upload(data: bytes, object_name: str, content_type: str) -> str:
         _UPLOADS[object_name] = (content_type, bytes(data))
         return PUBLIC_URL_TEMPLATE.format(bucket=TEST_BUCKET, object=object_name)
 
@@ -99,7 +99,7 @@ async def test_generate_pdf_unique_object_per_call():
 
 
 async def test_generate_pdf_upload_failure_returns_tool_error(monkeypatch):
-    def failing_upload(data, object_name, content_type):
+    async def failing_upload(data, object_name, content_type):
         raise ToolError("upload to storage bucket failed: backend unavailable")
 
     monkeypatch.setattr(
@@ -113,8 +113,8 @@ async def test_generate_pdf_upload_failure_returns_tool_error(monkeypatch):
 async def test_generate_pdf_missing_bucket_returns_tool_error(monkeypatch):
     monkeypatch.delenv(GCS_BUCKET_ENV, raising=False)
 
-    def real_upload_without_bucket(data, object_name, content_type):
-        return upload_document(data, object_name, content_type)
+    async def real_upload_without_bucket(data, object_name, content_type):
+        return await upload_document(data, object_name, content_type)
 
     monkeypatch.setattr(
         "assistant_mcp.toolsets.pdf.upload_document", real_upload_without_bucket

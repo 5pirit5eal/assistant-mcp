@@ -37,7 +37,7 @@ def fake_storage(monkeypatch):
     _UPLOADS.clear()
     monkeypatch.setenv(GCS_BUCKET_ENV, "test-bucket")
 
-    def fake_upload(data: bytes, object_name: str, content_type: str) -> str:
+    async def fake_upload(data: bytes, object_name: str, content_type: str) -> str:
         _UPLOADS[object_name] = (content_type, bytes(data))
         return PUBLIC_URL_TEMPLATE.format(bucket="test-bucket", object=object_name)
 

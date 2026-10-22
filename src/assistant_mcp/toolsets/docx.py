@@ -36,7 +36,7 @@ class GenerationResult(BaseModel):
 
 
 @mcp.tool
-def convert_to_docx(
+async def convert_to_docx(
     content: Annotated[
         str,
         Field(
@@ -112,5 +112,7 @@ def convert_to_docx(
             raise ToolError(f"docx conversion failed: {detail or 'unknown error'}")
         object_name = f"docx/{uuid.uuid4()}.docx"
         return GenerationResult(
-            url=upload_document(output.read_bytes(), object_name, _DOCX_CONTENT_TYPE)
+            url=await upload_document(
+                output.read_bytes(), object_name, _DOCX_CONTENT_TYPE
+            )
         )

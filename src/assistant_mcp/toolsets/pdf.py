@@ -258,7 +258,7 @@ def _markdown_to_story(markdown: str) -> list:
 
 
 @mcp.tool
-def generate_pdf(
+async def generate_pdf(
     text: Annotated[
         str,
         Field(
@@ -289,11 +289,13 @@ def generate_pdf(
         raise ToolError("text must not be empty")
     data = _build_pdf(_markdown_to_story(text))
     object_name = f"pdf/{uuid.uuid4()}.pdf"
-    return GenerationResult(url=upload_document(data, object_name, _PDF_CONTENT_TYPE))
+    return GenerationResult(
+        url=await upload_document(data, object_name, _PDF_CONTENT_TYPE)
+    )
 
 
 @mcp.tool
-def convert_to_pdf(
+async def convert_to_pdf(
     content: Annotated[
         str,
         Field(
@@ -361,5 +363,7 @@ def convert_to_pdf(
             raise ToolError(f"conversion failed for {fmt}: {detail or 'unknown error'}")
         object_name = f"pdf/{uuid.uuid4()}.pdf"
         return GenerationResult(
-            url=upload_document(result_file.read_bytes(), object_name, _PDF_CONTENT_TYPE)
+            url=await upload_document(
+                result_file.read_bytes(), object_name, _PDF_CONTENT_TYPE
+            )
         )

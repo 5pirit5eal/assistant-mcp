@@ -67,9 +67,9 @@ def test_bucket_env_constant_is_stable():
     assert GCS_BUCKET_ENV == "GCS_BUCKET_NAME"
 
 
-def test_upload_document_returns_public_url(monkeypatch):
+async def test_upload_document_returns_public_url(monkeypatch):
     client = _install_fake_client(monkeypatch, _FakeClient())
-    url = upload_document(b"%PDF-1.7 fake", "pdf/abc.pdf", "application/pdf")
+    url = await upload_document(b"%PDF-1.7 fake", "pdf/abc.pdf", "application/pdf")
     assert url == "https://storage.googleapis.com/test-bucket/pdf/abc.pdf"
     assert client.bucket_name == "test-bucket"
     content_type, data = client.fake_bucket.objects["pdf/abc.pdf"]
@@ -77,28 +77,28 @@ def test_upload_document_returns_public_url(monkeypatch):
     assert data == b"%PDF-1.7 fake"
 
 
-def test_upload_document_uses_ten_second_deadline(monkeypatch):
+async def test_upload_document_uses_ten_second_deadline(monkeypatch):
     client = _install_fake_client(monkeypatch, _FakeClient())
-    upload_document(b"x", "pdf/a.pdf", "application/pdf")
+    await upload_document(b"x", "pdf/a.pdf", "application/pdf")
     assert client.fake_bucket.timeouts == [10.0]
 
 
-def test_upload_document_missing_bucket_raises_tool_error(monkeypatch):
+async def test_upload_document_missing_bucket_raises_tool_error(monkeypatch):
     monkeypatch.delenv(GCS_BUCKET_ENV, raising=False)
     with pytest.raises(ToolError, match="bucket"):
-        upload_document(b"x", "pdf/a.pdf", "application/pdf")
+        await upload_document(b"x", "pdf/a.pdf", "application/pdf")
 
 
-def test_upload_document_empty_bucket_raises_tool_error(monkeypatch):
+async def test_upload_document_empty_bucket_raises_tool_error(monkeypatch):
     monkeypatch.setenv(GCS_BUCKET_ENV, "   ")
     with pytest.raises(ToolError, match="bucket"):
-        upload_document(b"x", "pdf/a.pdf", "application/pdf")
+        await upload_document(b"x", "pdf/a.pdf", "application/pdf")
 
 
-def test_upload_document_backend_failure_raises_tool_error(monkeypatch):
+async def test_upload_document_backend_failure_raises_tool_error(monkeypatch):
     _install_fake_client(monkeypatch, _FailingClient())
     with pytest.raises(ToolError, match="upload"):
-        upload_document(b"x", "pdf/a.pdf", "application/pdf")
+        await upload_document(b"x", "pdf/a.pdf", "application/pdf")
 
 
 def test_get_storage_client_is_cached(monkeypatch):

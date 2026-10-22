@@ -164,12 +164,10 @@ async def test_tools_remain_callable_in_memory_with_stateless_http_set(
 ):
     monkeypatch.setenv(MCP_STATELESS_HTTP, "true")
     monkeypatch.setenv(GCS_BUCKET_ENV, "test-bucket")
-    monkeypatch.setattr(
-        "assistant_mcp.toolsets.pdf.upload_document",
-        lambda data, object_name, content_type: (
-            PUBLIC_URL_TEMPLATE.format(bucket="test-bucket", object=object_name)
-        ),
-    )
+    async def fake_upload(data, object_name, content_type):
+        return PUBLIC_URL_TEMPLATE.format(bucket="test-bucket", object=object_name)
+
+    monkeypatch.setattr("assistant_mcp.toolsets.pdf.upload_document", fake_upload)
     server = build_server()
     async with Client(server) as client:
         result = await client.call_tool("pdf_generate_pdf", {"text": "Stateless probe text."})

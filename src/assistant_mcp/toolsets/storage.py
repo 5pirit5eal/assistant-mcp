@@ -4,8 +4,13 @@ Uploads generated documents to a public read bucket (objects are deleted
 by a bucket-level lifecycle rule one month after creation) and returns
 the public resource URL of the uploaded object. Mirrors the upload
 mechanics of swim-gen's backend (`internal/pdf/pdf.go`, `UploadPDF`).
+
+The official google-cloud-storage client is synchronous, so the blocking
+upload runs in a worker thread via `asyncio.to_thread`; the tool-facing
+function is async and never blocks the event loop.
 """
 
+import asyncio
 import os
 from functools import lru_cache
 
@@ -35,9 +40,9 @@ def _bucket_name() -> str:
     return name
 
 
-def upload_document(data: bytes, object_name: str, content_type: str) -> str:
-    """Upload ``data`` as ``object_name`` and return its public URL."""
-    bucket_name = _bucket_name()
+def _upload_blocking(
+    data: bytes, object_name: str, content_type: str, bucket_name: str
+) -> None:
     try:
         bucket = get_storage_client().bucket(bucket_name)
         bucket.blob(object_name).upload_from_string(
@@ -47,4 +52,12 @@ def upload_document(data: bytes, object_name: str, content_type: str) -> str:
         raise
     except Exception as exc:
         raise ToolError(f"upload to storage bucket failed: {exc}") from exc
+
+
+async def upload_document(data: bytes, object_name: str, content_type: str) -> str:
+    """Upload ``data`` as ``object_name`` and return its public URL."""
+    bucket_name = _bucket_name()
+    await asyncio.to_thread(
+        _upload_blocking, data, object_name, content_type, bucket_name
+    )
     return PUBLIC_URL_TEMPLATE.format(bucket=bucket_name, object=object_name)
