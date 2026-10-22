@@ -2,7 +2,7 @@
 
 ## Context
 
-`generate_pdf` (`src/assistant_mcp/toolsets/pdf.py`) currently parses Markdown with markdown-it into ReportLab flowables. There is no HTML renderer in the project; the docx toolset accepts HTML only as pandoc input. The server image is `python:3.14-slim` plus LibreOffice/pandoc; deploys run on Cloud Run with ~32 MB request-size limits. Verification during exploration: WeasyPrint 70.0 installs and imports cleanly under Python 3.14; it fails to load only where the Pango system libraries are absent (expected in the slim base image; the Dockerfile must add them).
+`generate_pdf` (`src/assistant_mcp/toolsets/pdf.py`) parses Markdown with markdown-it into ReportLab flowables and delivers the rendered PDF through the GCS document delivery (`upload_document`, public resource URL; see `gcs-document-delivery`). There is no HTML renderer in the project; the docx toolset accepts HTML only as pandoc input. The server image is `python:3.14-slim` plus LibreOffice/pandoc; deploys run on Cloud Run with ~32 MB request-size limits. Verification during exploration: WeasyPrint 70.0 installs and imports cleanly under Python 3.14; it fails to load only where the Pango system libraries are absent (expected in the slim base image; the Dockerfile must add them).
 
 ## Goals / Non-Goals
 
@@ -24,7 +24,7 @@
 
 Print-CSS fidelity in a pure-Python-maintained package; needs only Pango/Freetype/Harfbuzz system libs added to the slim image. Alternatives: Chromium/Playwright (rejected: image size), LibreOffice HTML import (rejected: weak, dated CSS support), xhtml2pdf (rejected: CSS fidelity far below the "visually polished" bar).
 
-**Empirical verification (mandatory before finalizing):** the design relies on WeasyPrint behavior against the locked version; a verification task must confirm, in the project environment (`uv` lock, Python 3.14): (1) fragments without `<html>` wrapper render correctly via `HTML(string=...)`, (2) `base_url=None`/no URL fetcher prevents network fetches, (3) German umlauts and `<style>` blocks apply as expected. Exploration already confirmed install/import under Python 3.14; the project-environment run must confirm rendering behavior.
+**Empirical verification (completed):** confirmed in the project environment (`uv` lock, Python 3.14, WeasyPrint 70.0): (1) fragments without `<html>` wrapper render correctly via `HTML(string=...)`, (2) WeasyPrint's `URLFetcher(allowed_protocols={"data"})` rejects every non-data scheme with a `ValueError` ("disallowed protocol") while data-URIs pass, (3) German umlauts, entities, and `<style>` blocks apply as expected.
 
 ### Detection: conservative prefix heuristic
 
@@ -42,7 +42,7 @@ Rationale: CommonMark permits embedded HTML, so a single "contains `<p>`" check 
 
 ### Rendering: inline-only, network-free
 
-Render via `HTML(string=text, base_url=None).write_pdf()` with WeasyPrint's default URL fetcher restricted: no `url_fetcher` that performs network I/O; a custom fetcher that raises for any non-data-URI scheme enforces the "no external resources" requirement deterministically. Data-URIs decode locally and are allowed.
+Render via `HTML(string=text, base_url=None, url_fetcher=...)` with `URLFetcher(allowed_protocols={"data"})` (WeasyPrint's own fetcher class): every non-data scheme raises `ValueError` before any I/O is attempted, enforcing the "no external resources" requirement deterministically. Data-URIs decode locally and are allowed. The rendered bytes are uploaded through the existing GCS delivery; the tool returns the public resource URL (`GenerationResult`).
 
 ### Error handling
 
@@ -58,7 +58,7 @@ Empty input (`text.strip()`) raises `ToolError` on all paths (existing behavior 
 
 ## Migration Plan
 
-Additive, backward-compatible: `format` defaults to `"auto"`, existing Markdown callers unchanged. Rollout is a normal release: dependency + Dockerfile + tool change ship together in one releasable (`feat`) commit series; rollback is the previous image tag.
+Additive, backward-compatible: `format` defaults to `"auto"`, existing Markdown callers unchanged. Output delivery follows the established GCS URL pattern. Rollout is a normal release: dependency + Dockerfile + tool change ship together in one releasable (`feat`) commit series; rollback is the previous image tag.
 
 ## Open Questions
 

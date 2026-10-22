@@ -6,7 +6,7 @@ Parallelization: each group's tasks are internally TDD-sequential (test first, t
 
 - [x] 1.1 Add `weasyprint` to `pyproject.toml` runtime dependencies and run `uv lock` + `uv sync`; verify `uv run python -c "import weasyprint"` succeeds in the project environment
 - [x] 1.2 Add the Pango system libraries (`libpango-1.0-0`, `libpangoft2-1.0-0` plus transitive deps like libharfbuzz/libffi) to the Dockerfile apt install; verify with a Docker build (`docker build .`) - config file, validated by build and linters, exempt from TDD
-- [x] 1.3 Empirically verify WeasyPrint behavior in the project environment (design.md "Empirical verification"): fragment without `<html>` wrapper renders; a URL-fetcher restriction blocks network schemes while data-URIs work; umlauts and `<style>` blocks apply. Record the observed behavior in the design's verification note; if any assumption fails, stop and revise the design before continuing
+- [x] 1.3 Empirically verify WeasyPrint behavior in the project environment (design.md "Empirical verification", completed): fragment without `<html>` wrapper renders; `URLFetcher(allowed_protocols={"data"})` blocks network schemes while data-URIs work; umlauts and `<style>` blocks apply
 
 ## 2. Format detection (parallelizable with 3 and 6 after group 1)
 
@@ -15,8 +15,8 @@ Parallelization: each group's tasks are internally TDD-sequential (test first, t
 
 ## 3. HTML renderer (parallelizable with 2 and 6 after group 1)
 
-- [x] 3.1 Write the failing tests for HTML rendering: an HTML fragment produces `%PDF-` bytes via the MCP client; a full document with an embedded `<style>` block applying color/font produces a PDF whose styled text reflects it; umlauts/entities render correctly; external-resource references do not trigger network fetches (assert via the injected fetcher restriction, no real network). Verify the tests fail for the expected reason (no HTML path yet)
-- [x] 3.2 Implement the minimal renderer: `HTML(string=...)` with a URL fetcher that rejects every non-data-URI scheme, WeasyPrint exceptions wrapped in `ToolError`. Verify `uv run pytest tests/test_pdf_toolset.py -k html` passes
+- [x] 3.1 Write the failing tests for HTML rendering in `tests/test_pdf_html.py` (via the MCP client and the fake-storage upload capture): an HTML fragment produces `%PDF-` upload bytes; a full document with an embedded `<style>` block applying color/font produces a PDF whose styled text reflects it; umlauts/entities render correctly; external-resource references do not trigger network fetches (asserted directly on the installed data-only fetcher). Verified the tests failed for the expected reason (no HTML path yet)
+- [x] 3.2 Implement the minimal renderer: `HTML(string=..., base_url=None, url_fetcher=URLFetcher(allowed_protocols={"data"}))`, WeasyPrint exceptions wrapped in `ToolError`; rendered bytes go through the GCS upload. Verify `uv run pytest tests/test_pdf_html.py` passes
 
 ## 4. Tool interface wiring (blocked by 2 and 3)
 

@@ -25,9 +25,9 @@ The pdf toolset accepts Markdown and plain text, but agents frequently produce H
 
 ## Impact
 
-- `src/assistant_mcp/toolsets/pdf.py`: format parameter, HTML detection, WeasyPrint rendering path.
+- `src/assistant_mcp/toolsets/pdf.py`: format parameter, HTML detection, WeasyPrint rendering path; rendered PDFs are uploaded through the existing GCS delivery and returned as public resource URLs (see `gcs-document-delivery`).
 - `pyproject.toml` / `uv.lock`: new runtime dependency `weasyprint`.
 - `Dockerfile`: additional system libraries required by WeasyPrint (`libpango-1.0-0`, `libpangoft2-1.0-0`, and their transitive deps such as `libharfbuzz`/`libffi`).
-- `tests/test_pdf_toolset.py`, `tests/test_toolsets.py`: tests for detection, rendering, errors, and tool metadata.
+- `tests/test_pdf_html.py`, `tests/test_pdf_toolset.py`, `tests/test_toolsets.py`: tests for detection, rendering, errors, and tool metadata.
 - `README.md`: document the extended `generate_pdf` behavior.
 - `openspec/specs/pdf-generation/spec.md`: synced at archive time.

@@ -4,12 +4,12 @@
 
 ### Requirement: PDF generation from HTML
 
-The `generate_pdf` tool of the `pdf` toolset MUST render HTML input (fragments or full documents with embedded CSS) into a valid PDF with print-CSS fidelity and return the PDF bytes as a structured MCP content response.
+The `generate_pdf` tool of the `pdf` toolset MUST render HTML input (fragments or full documents with embedded CSS) into a valid PDF with print-CSS fidelity and deliver it through the public GCS resource URL output (see the `gcs-document-delivery` capability).
 
 #### Scenario: HTML fragment generates a PDF
 
 - **WHEN** `generate_pdf` is called with an HTML fragment containing block-level markup such as `<p>`, `<div>`, or `<h1>`-`<h6>`
-- **THEN** the tool returns valid PDF bytes as a structured MCP content response that begins with `%PDF-`
+- **THEN** the tool returns structured content with a single `url` field matching the public GCS URL template, whose uploaded object content is a valid PDF that begins with `%PDF-`
 
 #### Scenario: Full HTML document with embedded CSS
 
