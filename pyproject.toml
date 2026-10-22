@@ -11,6 +11,7 @@ dependencies = [
     "markdown-it-py>=3.0.0",
     "pydantic>=2",
     "reportlab>=4.2.0",
+    "weasyprint>=70.0",
 ]
 
 [project.scripts]
@@ -51,6 +52,10 @@ asyncio_mode = "auto"
 
 [tool.mypy]
 python_version = "3.14"
+
+[[tool.mypy.overrides]]
+module = ["weasyprint", "weasyprint.*"]
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "google.cloud.storage"
