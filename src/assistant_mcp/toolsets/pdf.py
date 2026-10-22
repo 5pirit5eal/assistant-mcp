@@ -3,6 +3,7 @@
 import base64
 import binascii
 import io
+import re
 import shutil
 import subprocess
 import tempfile
@@ -83,12 +84,35 @@ def _escape(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+_SUPERSCRIPT_RE = re.compile(r"\^(\{([^{}]+)\}|[A-Za-z0-9]+)")
+
+
+def _render_text(text: str) -> str:
+    """Escape plain text and turn ``^`` markers into superscript markup.
+
+    ``x^2`` superscripts the following run of ASCII alphanumerics,
+    ``x^{n+1}`` the braced group. A caret followed by anything else -
+    empty, nested, or unclosed braces, non-ASCII characters,
+    punctuation - stays a literal caret.
+    """
+    parts: list[str] = []
+    pos = 0
+    for match in _SUPERSCRIPT_RE.finditer(text):
+        start, end = match.span()
+        parts.append(_escape(text[pos:start]))
+        content = match.group(2) if match.group(1).startswith("{") else match.group(1)
+        parts.append(f"<super>{_escape(content)}</super>")
+        pos = end
+    parts.append(_escape(text[pos:]))
+    return "".join(parts)
+
+
 def _render_inline(tokens) -> str:
     parts: list[str] = []
     for tok in tokens:
         match tok.type:
             case "text":
-                parts.append(_escape(tok.content))
+                parts.append(_render_text(tok.content))
             case "code_inline":
                 parts.append(f"<font face='Courier'>{_escape(tok.content)}</font>")
             case "strong_open":
@@ -231,11 +255,16 @@ def generate_pdf(
     """Generate a PDF from Markdown or plain text and return it as a file.
 
     Supports Markdown: headings, paragraphs, bullet and ordered lists,
-    tables, code blocks, links, bold and italic. German umlauts and
-    quotes render correctly; characters outside the built-in Latin
-    fonts (e.g. CJK) render as replacement glyphs. Image tokens in the
-    Markdown input are not supported and are silently skipped (no
-    error, no output).
+    tables, code blocks, links, bold and italic. Math superscripts: a
+    caret renders the following run of ASCII letters and digits as
+    raised, smaller glyphs (``x^2``), and a braced group as a
+    multi-character superscript (``x^{n+1}``); a caret followed by
+    anything else (punctuation, non-ASCII, empty braces) stays
+    literal (use code spans for literal carets in front of digits).
+    German umlauts and quotes render correctly; characters outside
+    the built-in Latin fonts (e.g. CJK) render as replacement glyphs.
+    Image tokens in the Markdown input are not supported and are
+    silently skipped (no error, no output).
 
     Returns:
         The generated PDF as a downloadable file.
