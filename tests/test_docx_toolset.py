@@ -505,7 +505,7 @@ async def test_unfetchable_remote_image_degrades_gracefully():
 
 
 @pytest.mark.skipif(PANDOC is None, reason="pandoc not available in this environment")
-async def test_conversion_failure_returns_error_and_server_recovers(monkeypatch):
+async def test_conversion_failure_returns_error_and_server_recovers():
     long_detail = b"x" * 4000 + b"pandoc: cannot parse input"
 
     def failing_run(cmd, **kwargs):
@@ -513,14 +513,14 @@ async def test_conversion_failure_returns_error_and_server_recovers(monkeypatch)
             cmd, returncode=1, stdout=b"", stderr=long_detail
         )
 
-    monkeypatch.setattr("assistant_mcp.toolsets.docx.subprocess.run", failing_run)
-    result = await _call_convert_error(MARKDOWN_COMMON_ELEMENTS, MARKDOWN_FORMAT)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("assistant_mcp.toolsets.docx.subprocess.run", failing_run)
+        result = await _call_convert_error(MARKDOWN_COMMON_ELEMENTS, MARKDOWN_FORMAT)
     message = _error_text(result)
     assert "cannot parse input" in message
     assert "conversion failed" in message
     assert "x" * 4000 not in message, "error detail must be truncated"
 
-    monkeypatch.undo()
     follow_up = await _call_convert("# Still alive\n", MARKDOWN_FORMAT)
     assert not follow_up.is_error
 
