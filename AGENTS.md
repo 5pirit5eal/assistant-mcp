@@ -4,47 +4,42 @@
 
 Modular FastMCP server (`src/assistant_mcp/`). Each toolset lives in
 `src/assistant_mcp/toolsets/<name>.py`, exposes `mcp = FastMCP("<name>")`,
-and is registered in `TOOLSETS` (`toolsets/__init__.py`). Tool inputs are
-flat `Annotated[type, Field(...)]` parameters with a non-empty description
-and at least one example. Tool outputs are structured: a pydantic model,
-`Image` for image content, `File` for binary content, or a `ToolResult`
-combining both; plain strings are forbidden (enforced by
-`tests/test_toolsets.py`). `File.format` maps to `application/<format>`
-outside a small text table — use `Image` for images. Helpers exchange
-pydantic models, not raw dicts or lists; pass primitives directly. Toolset
-modules hold no cross-request state, except `lru_cache`-wrapped client
-builders keyed by complete credentials. Tests
-drive tools via `fastmcp.Client`. Verify with `uv run pytest`,
-`uv run ruff check .`, and `uv run mypy src`.
+and is registered in `TOOLSETS` (`src/assistant_mcp/toolsets/__init__.py`). Tool inputs are
+flat `Annotated[type, Field(...)]` parameters; outputs are structured
+(pydantic model, `Image`, `File`, or `ToolResult`), never plain strings;
+toolset modules hold no cross-request state, except `lru_cache`-wrapped
+client builders. Parameter descriptions, examples, output structure, and
+statelessness are enforced by `tests/test_toolsets.py`; tests drive tools
+via `fastmcp.Client`. Helpers exchange pydantic models, not raw dicts or
+lists; use `Image` for images and `File` for binary content.
+
+## Docs discipline
+
+Prefer deterministic checks (test, lint, CI) over prose rules: wire the
+check first, keep the doc a one-line pointer. Keep this file and the
+skills (`.vibe/skills/`) minimal — load-bearing rules and navigation
+pointers only.
 
 ## Commits
 
 Commit messages use the Conventional Commits types configured in
-`.releaserc`, which drives semantic-release versioning: `feat` releases
-a minor version, `fix` and `perf` a patch version, and a `BREAKING
-CHANGE:` footer (or `!`) a major version. `docs`, `style`, `chore`,
-`refactor`, `test`, `build`, and `ci` never trigger a release. When a
-change should ship to Cloud Run, commit it with a releasable type;
-non-releasable types deliberately stay undeployed.
+`.releaserc`; semantic-release derives the version and the Cloud Run
+deploy runs only on a release. Ship Cloud Run changes with a releasable
+type; other types deliberately stay undeployed.
 
 ## Verification
 
-- Dockerfile or dependency changes: `docker build` must succeed before the
-  task is marked done. Run container-dependent scenarios inside the built
-  image (`docker run ... uv run --no-sync python`).
-- Tests gated on system tools (soffice) skip on machines without the tool;
-  they are only verified when actually run (locally or in the Docker image).
-  Never treat a skip as passing.
-- Toolsets that wrap an external service (WebDAV, S3, third-party APIs):
-  verify protocol and path conventions against the real service — or a
-  recorded real response — before the change's tasks are checked off. A
-  fully mocked client must mirror a recorded real response shape, never an
-  assumed one.
-- Credentials used for live verification runs never go into repo files,
-  tests, or fixtures: keep them in ephemeral scratch files outside the repo
-  and delete them after use.
-- Project rules live in `openspec/config.yaml`; OpenSpec artifacts are
-  written in English.
+CI (`.github/workflows/ci.yml`) runs ruff, mypy, pytest, actionlint, and a
+Docker build with the test suite inside the image; skipped tests fail the
+in-image run. Toolsets that wrap an external service (WebDAV, S3,
+third-party APIs): verify protocol and path conventions against the real
+service — or a recorded real response — before the change's tasks are
+checked off; a fully mocked client must mirror a recorded real response
+shape, never an assumed one. Live credentials stay in ephemeral scratch
+files outside the repo; committing them fails `tests/test_repo_hygiene.py`.
+
+Project rules live in `openspec/config.yaml`; OpenSpec artifacts are
+written in English.
 
 ## Deliberately deferred (pdf toolset)
 

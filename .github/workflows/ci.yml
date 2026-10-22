@@ -49,5 +49,5 @@ jobs:
       - name: Run test suite inside the image
         run: >-
           docker run --rm -v "${GITHUB_WORKSPACE}":/src:ro
-          -e UV_PROJECT_ENVIRONMENT=/tmp/venv assistant-mcp:ci
+          -e UV_PROJECT_ENVIRONMENT=/tmp/venv -e FORBID_SKIPPED_TESTS=1 assistant-mcp:ci
           sh -c "cd /src && uv sync --frozen && uv run --no-sync pytest"
