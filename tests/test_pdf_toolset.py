@@ -200,13 +200,20 @@ async def test_tool_input_schema_has_documented_parameters():
     assert set(tools) >= {"generate_pdf", "convert_to_pdf"}
 
     generate = tools["generate_pdf"]
-    assert set(generate.input_schema["properties"]) == {"text"}
+    assert set(generate.input_schema["properties"]) == {"text", "format"}
     text_prop = generate.input_schema["properties"]["text"]
     assert text_prop["type"] == "string"
     assert text_prop["description"].strip()
     assert isinstance(text_prop.get("examples"), list) and text_prop["examples"], (
         "generate_pdf parameter 'text' must carry at least one example"
     )
+    format_prop = generate.input_schema["properties"]["format"]
+    assert format_prop["type"] == "string"
+    assert format_prop["description"].strip()
+    assert isinstance(format_prop.get("examples"), list) and format_prop["examples"], (
+        "generate_pdf parameter 'format' must carry at least one example"
+    )
+    assert generate.input_schema["properties"]["format"].get("default") == "auto"
 
     convert = tools["convert_to_pdf"]
     assert set(convert.input_schema["properties"]) == {"content", "format"}

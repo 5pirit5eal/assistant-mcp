@@ -30,8 +30,8 @@ Print-CSS fidelity in a pure-Python-maintained package; needs only Pango/Freetyp
 
 HTML wins only when HTML-typical markup appears before the first Markdown-typical token. Concrete rule (to be implemented as a small pure function, constants named per repo rules):
 
-- HTML indicators: `<!DOCTYPE`, `<html`, `<head`, `<body`, `<title`, `<meta`, `<style`, `<script`, `<p>`, `<p `, `<div`, `<h1`-`<h6`, `<table`, `<ul`, `<ol`, `<br`, `<hr`.
-- Markdown indicators: ATX heading lines (`#{1,6} `), bullet/ordered list lines (`- ` / `* ` / `1. `), fence lines (``` ``` ```), setext underlines (`===`/`---`), table pipes, blockquote (`> `).
+- HTML indicators: `<!DOCTYPE`, `<html`, `<head`, `<body`, `<title`, `<meta`, `<style`, `<script`, `<p>`, `<p\u00a0`, `<div`, `<h1`-`<h6`, `<table`, `<ul`, `<ol`, `<br`, `<hr`.
+- Markdown indicators: ATX heading lines (`#{1,6}\u00a0`), bullet/ordered list lines (`-\u00a0` / `*\u00a0` / `1.\u00a0`), fence lines, setext underlines (`===`/`---`), table pipes, blockquote lines (`>\u00a0`).
 - Scan stripped, non-empty, non-fence content in order; first indicator found decides. Plain text without any indicator is Markdown (today's pipeline).
 
 Rationale: CommonMark permits embedded HTML, so a single "contains `<p>`" check would misroute Markdown documents that embed snippets; prefix ordering makes `# Title\n\n<p>x</p>` Markdown and `<h1>Title</h1><p>x</p>` HTML. Cost: an HTML document that happens to open with Markdown-looking text inside `<style>`/`<script>` comments could misroute; `format` is the escape hatch.

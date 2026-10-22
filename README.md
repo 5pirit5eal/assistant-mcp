@@ -12,7 +12,7 @@ src/assistant_mcp/
 │   ├── __init__.py  # Toolset-Registry
 │   ├── docx.py      # DOCX-Toolset: Markdown/HTML-to-DOCX (pandoc)
 │   ├── docx_reference.docx  # Word-Theme des DOCX-Toolsets (mitgeliefert)
-│   └── pdf.py       # PDF-Toolset: Markdown-to-PDF und Office-to-PDF
+│   └── pdf.py       # PDF-Toolset: Markdown/HTML-to-PDF und Office-to-PDF
 └── ...
 ```
 
@@ -30,6 +30,17 @@ schlägt nicht fehl. Das Styling (Überschriften in `#4472C4`, Tabellen mit scha
 Kopfzeile, Zellrändern und Zebra-Streifen) kommt aus der mitgelieferten Theme-Datei
 `docx_reference.docx` und ist für beide Eingabeformate identisch; sie wird per
 `scripts/build_docx_reference.py` aus pandocs Default-Referenzdokument regeneriert.
+
+Das PDF-Toolset `generate_pdf(text, format)` akzeptiert Markdown, Plaintext und HTML.
+`format` ist optional (`"auto"` (Default), `"markdown"`, `"html"`): im Auto-Modus wird
+erkannt, ob HTML-Markup (z. B. `<!DOCTYPE`, `<html`, `<p>`, `<div>`, `<style>`,
+Überschriften-Tags) vor dem ersten Markdown-typischen Token (`#`, Listen, Fences,
+Tabellen) auftaucht — dann rendert WeasyPrint das HTML mit Print-CSS-Fidelity
+(eingebettete `<style>`-Regeln, Inline-Styles, `@page`-Geometrie), sonst läuft die
+bestehende Markdown-Pipeline. Externe Ressourcen (Bilder, Stylesheets, Fonts per URL)
+werden nie geladen; als Data-URI eingebettete Ressourcen sind erlaubt. Mit
+`format="html"` bzw. `format="markdown"` lässt sich die Erkennung explizit übersteuern.
+`convert_to_pdf(content, format)` bleibt bei den Office-Formaten (DOCX, XLSX, PPTX).
 
 ## Lokale Entwicklung
 

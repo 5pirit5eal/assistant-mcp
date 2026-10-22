@@ -21,6 +21,8 @@ RUN apt-get update \
         libreoffice-writer \
         libreoffice-calc \
         libreoffice-impress \
+        libpango-1.0-0 \
+        libpangoft2-1.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=pandoc-fetch /tmp/pandoc.deb /tmp/pandoc.deb

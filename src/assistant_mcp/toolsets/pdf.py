@@ -28,6 +28,8 @@ from reportlab.platypus import (
     Table,
     TableStyle,
 )
+from weasyprint import HTML as WeasyprintHTML
+from weasyprint.urls import URLFetcher
 
 mcp = FastMCP("pdf")
 
@@ -64,6 +66,42 @@ _TABLE_STYLE = TableStyle(
 _SUPPORTED_FORMATS = ("docx", "xlsx", "pptx")
 _FORMATS_DESC = ", ".join(f'"{item}"' for item in _SUPPORTED_FORMATS)
 
+_GENERATE_FORMATS = ("auto", "markdown", "html")
+_GENERATE_FORMATS_DESC = ", ".join(f'"{item}"' for item in _GENERATE_FORMATS)
+_DATA_ONLY_FETCHER = URLFetcher(allowed_protocols={"data"})
+
+_HTML_DOC_PREFIXES = (
+    "<!doctype",
+    "<html",
+    "<head",
+    "<body",
+    "<title",
+    "<meta",
+    "<style",
+    "<script",
+)
+_HTML_BLOCK_PREFIXES = (
+    "<p>",
+    "<p ",
+    "<div",
+    "<table",
+    "<ul>",
+    "<ul ",
+    "<ol>",
+    "<ol ",
+    "<br",
+    "<hr",
+    "<h1",
+    "<h2",
+    "<h3",
+    "<h4",
+    "<h5",
+    "<h6",
+)
+_MD_LINE_RE = re.compile(
+    r"^(?:#{1,6} |- |\* |1\. |```|===|---\s*$|> |\|.*)"
+)
+
 
 def _build_pdf(story: list) -> bytes:
     buffer = io.BytesIO()
@@ -82,6 +120,35 @@ def _build_pdf(story: list) -> bytes:
 
 def _escape(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _detect_input_format(text: str) -> str:
+    """Return ""html"" when HTML markup appears before any Markdown token.
+
+    Scans stripped lines; the first line that carries an HTML indicator or
+    a Markdown indicator decides. Plain text without any indicator stays
+    Markdown. An HTML snippet embedded in leading Markdown content is
+    therefore rendered by the Markdown pipeline, while HTML documents and
+    fragments route to the HTML renderer.
+    """
+    for line in text.splitlines():
+        stripped = line.strip().lower()
+        if not stripped:
+            continue
+        if stripped.startswith(_HTML_DOC_PREFIXES + _HTML_BLOCK_PREFIXES):
+            return "html"
+        if _MD_LINE_RE.match(stripped):
+            return "markdown"
+    return "markdown"
+
+
+def _render_html_to_pdf(html: str) -> bytes:
+    try:
+        return WeasyprintHTML(
+            string=html, base_url=None, url_fetcher=_DATA_ONLY_FETCHER
+        ).write_pdf()
+    except Exception as exc:
+        raise ToolError(f"HTML rendering failed: {exc}") from exc
 
 
 _SUPERSCRIPT_RE = re.compile(r"\^(\{([^{}]+)\}|[A-Za-z0-9]+)")
@@ -247,14 +314,26 @@ def generate_pdf(
     text: Annotated[
         str,
         Field(
-            description="Markdown or plain text content of the PDF.",
+            description="Content of the PDF: Markdown, plain text, or HTML.",
             examples=["# Quarterly Report\nRevenue is up."],
         ),
     ],
+    format: Annotated[  # noqa: A002
+        str,
+        Field(
+            description=(
+                f"Input format: one of {_GENERATE_FORMATS_DESC}. "
+                '"auto" (default) detects HTML vs. Markdown content; '
+                '"markdown" and "html" force the respective renderer.'
+            ),
+            examples=["auto"],
+        ),
+    ] = "auto",
 ) -> File:
-    """Generate a PDF from Markdown or plain text and return it as a file.
+    """Generate a PDF from Markdown, plain text, or HTML and return it as
+    a file.
 
-    Supports Markdown: headings, paragraphs, bullet and ordered lists,
+    Markdown supports headings, paragraphs, bullet and ordered lists,
     tables, code blocks, links, bold and italic. Math superscripts: a
     caret renders the following run of ASCII letters and digits as
     raised, smaller glyphs (``x^2``), and a braced group as a
@@ -266,12 +345,33 @@ def generate_pdf(
     Image tokens in the Markdown input are not supported and are
     silently skipped (no error, no output).
 
+    HTML input (fragments or full documents) is rendered with
+    print-CSS fidelity: embedded ``<style>`` rules, inline styles, and
+    ``@page`` geometry apply. External resources (images, stylesheets,
+    fonts referenced by URL) are never fetched; data-URI resources
+    embedded in the input are allowed.
+
+    Args:
+        text: Markdown, plain text, or HTML content of the PDF.
+        format: "auto" detects the input type (HTML markup before any
+            Markdown token routes to the HTML renderer); "markdown" and
+            "html" override detection explicitly.
+
     Returns:
         The generated PDF as a downloadable file.
     """
     if not text.strip():
         raise ToolError("text must not be empty")
-    return File(data=_build_pdf(_markdown_to_story(text)), name="output.pdf", format="pdf")
+    fmt = (format or "auto").lower().strip()
+    if fmt not in _GENERATE_FORMATS:
+        supported = ", ".join(_GENERATE_FORMATS)
+        raise ToolError(f"unsupported format: {format}. Use one of: {supported}")
+    effective = fmt if fmt != "auto" else _detect_input_format(text)
+    if effective == "html":
+        data = _render_html_to_pdf(text)
+    else:
+        data = _build_pdf(_markdown_to_story(text))
+    return File(data=data, name="output.pdf", format="pdf")
 
 
 @mcp.tool
