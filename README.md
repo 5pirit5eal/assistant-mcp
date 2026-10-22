@@ -5,7 +5,7 @@ Modularer MCP-Server auf Basis von [FastMCP](https://gofastmcp.com/), deploybar 
 
 ## Struktur
 
-```
+```text
 src/assistant_mcp/
 ├── server.py        # Einstiegspunkt: FastMCP-Server, mountet alle Toolsets
 ├── toolsets/
@@ -164,7 +164,7 @@ Lesezugriffe werden prozesslokal gecacht — nur mit Ciphertext, TTL 5 Minuten,
 Schreibzugriffe invalidieren den Cache-Eintrag und persistieren.
 
 | Variable | Bedeutung | Injektion im Deploy |
-|---|---|---|
+| --- | --- | --- |
 | `MCP_STATELESS_HTTP` | `false` (case-insensitive) stellt stateful HTTP wieder her; ungesetzt oder jeder andere Wert: stateless (Default) | Plain Env Var (`true`, Deploy-Workflow) |
 
 Gedeployt wird nur der verifizierte Release-Commit (Verifikation und Deploy im
@@ -192,7 +192,7 @@ Authentifizierung; bei einer Teilmenge verweigert er den Start und nennt die
 fehlenden Variablen.
 
 | Variable | Bedeutung | Injektion im Deploy |
-|---|---|---|
+| --- | --- | --- |
 | `GOOGLE_CLIENT_ID` | Google-OAuth-Client-ID | Secret Manager (`google-client-id`) |
 | `GOOGLE_CLIENT_SECRET` | Google-OAuth-Client-Secret | Secret Manager (`google-client-secret`) |
 | `MCP_BASE_URL` | Öffentliche Service-URL, absolut mit `https://` | Plain Env Var (löst der Workflow per `gcloud run services describe` auf) |

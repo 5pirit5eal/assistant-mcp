@@ -1,6 +1,7 @@
 # service-auth Specification
 
 ## Purpose
+
 Defines who may use the HTTP-exposed assistant-mcp service and how callers prove
 their identity: an OAuth 2.1 layer in front of all tools, with Google as the
 identity provider, an explicit account allowlist enforced by the service itself,
