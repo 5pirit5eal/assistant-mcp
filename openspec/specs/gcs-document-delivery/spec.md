@@ -1,6 +1,14 @@
-# gcs-document-delivery Specification (delta)
+# gcs-document-delivery Specification
 
-## ADDED Requirements
+## Purpose
+
+The MCP server's ability to deliver generated documents (PDF, DOCX) as public
+Google Cloud Storage resource URLs instead of embedded file content - documents
+are uploaded to a public read bucket whose objects are automatically deleted
+one month after creation, so tool results stay small and independent of
+transport payload limits.
+
+## Requirements
 
 ### Requirement: Public GCS resource URL output
 
@@ -91,6 +99,7 @@ project's README as part of the bucket setup.
   rule that deletes objects 30 days after creation
 
 #### Scenario: Server behavior is independent of the retention window
+
 - **WHEN** any file-producing tool uploads a document
 - **THEN** the upload and URL return succeed without the server reading or
   enforcing the retention configuration
@@ -107,29 +116,3 @@ shall remain in the toolset modules.
   `convert_to_docx` and inspects the tool result content blocks
 - **THEN** no embedded resource/blob content block carrying the document
   bytes is present; the result is the structured URL response
-
-## MODIFIED Requirements
-
-### Requirement: `MODIFIED: Binary outputs returned as file results`
-
-The `toolset-tool-interface` requirement "Structured tool outputs" is
-modified for this change: binary-producing tools return the public GCS
-resource URL as a pydantic model (`url` field) instead of a file result.
-The requirement that tools MUST NOT return a plain unstructured string
-remains unchanged.
-
-#### Scenario: URL outputs returned as structured content
-
-- **WHEN** a client calls a tool that produces binary content, such as
-  `generate_pdf`
-- **THEN** the response contains structured content with a `url` field, and
-  no embedded binary file result
-
-## Notes
-
-- The base64 *input* of `convert_to_pdf` and base64 data-URI image inputs of
-  `convert_to_docx` are out of scope of this change and remain as specified
-  in `pdf-file-conversion` and `docx-generation`.
-- The `pdf-generation` purpose ("return them as a structured MCP content
-  response" for bytes) is superseded by the URL output for the delivery part;
-  rendering requirements are untouched. Main specs are updated at sync time.

@@ -22,17 +22,18 @@ Every tool exposed by a registered toolset MUST declare its inputs as flat param
 
 ### Requirement: Structured tool outputs
 
-Every tool MUST return a structured output: a pydantic model returned as structured content, or a file result for binary content. Tools MUST NOT return a plain unstructured string as their result.
+Every tool MUST return a structured output: a pydantic model returned as structured content. Tools MUST NOT return a plain unstructured string as their result. Binary artifacts (generated documents) are not embedded in tool results; they are uploaded to the public GCS document bucket and returned as a public resource URL inside the structured content (see the `gcs-document-delivery` capability).
 
 #### Scenario: Pydantic output returned as structured content
 
 - **WHEN** a client calls a tool whose output is a pydantic model
 - **THEN** the response contains structured content matching that model's schema
 
-#### Scenario: Binary outputs returned as file results
+#### Scenario: URL outputs returned as structured content
 
 - **WHEN** a client calls a tool that produces binary content, such as `generate_pdf`
-- **THEN** the response contains the binary content as a file result (a structured MCP content response), not as a plain string
+- **THEN** the response contains structured content with a `url` field, and
+  no embedded binary file result
 
 ### Requirement: Bootstrap toolsets are removed
 

@@ -4,8 +4,8 @@
 
 The MCP server's ability to convert Markdown or HTML text into a
 well-formatted, consistently styled Word document (DOCX) and return it as a
-structured MCP content response - suitable for remote operation without a
-shared filesystem.
+public GCS resource URL (see the `gcs-document-delivery` capability) - suitable
+for remote operation without a shared filesystem.
 
 ## Requirements
 
@@ -13,7 +13,8 @@ shared filesystem.
 
 The `convert_to_docx` tool of the `docx` toolset MUST convert Markdown text
 passed via the `content` parameter with `format` set to `"markdown"` into a
-valid DOCX document and return it as a structured MCP content response. The
+valid DOCX document and return the public GCS resource URL of the uploaded
+DOCX as structured content. The
 conversion MUST preserve the document structure: headings by level, paragraphs,
 bold and italic inline formatting, links, bullet and ordered lists (including
 nesting), and tables with a styled header row.
@@ -23,7 +24,7 @@ nesting), and tables with a styled header row.
 - **WHEN** `convert_to_docx` is called with `format` `"markdown"` and a Markdown
   document containing a top-level heading, a paragraph with bold and italic
   spans, a nested bullet list, an ordered list, and a pipe table
-- **THEN** the tool returns a valid DOCX file result, and the document contains
+- **THEN** the tool returns a public GCS resource URL whose fetched content is a valid DOCX, and the document contains
   the heading as a Word heading style, the list items as Word list paragraphs
   with conventional indents, and the table with a styled header row
 
@@ -31,14 +32,14 @@ nesting), and tables with a styled header row.
 
 - **WHEN** `convert_to_docx` is called with `format` `"markdown"` and a Markdown
   document containing a strikethrough span, a task list, and a code block
-- **THEN** the tool returns a valid DOCX file result, and the document contains
+- **THEN** the tool returns a public GCS resource URL whose fetched content is a valid DOCX, and the document contains
   the strikethrough formatting, the task list markers, and the code block
 
 ### Requirement: Conversion of HTML to DOCX
 
 The `convert_to_docx` tool MUST convert HTML text passed via the `content`
 parameter with `format` set to `"html"` into a valid DOCX document and return
-it as a structured MCP content response, preserving the same structure classes
+it as a public GCS resource URL, preserving the same structure classes
 as Markdown input: headings, paragraphs, inline formatting, lists, and tables.
 
 #### Scenario: HTML with common elements is converted
@@ -46,7 +47,7 @@ as Markdown input: headings, paragraphs, inline formatting, lists, and tables.
 - **WHEN** `convert_to_docx` is called with `format` `"html"` and an HTML
   document containing `<h1>`-`<h3>` headings, a paragraph with `<strong>` and
   `<em>` spans, a `<ul>` and an `<ol>`, and a `<table>`
-- **THEN** the tool returns a valid DOCX file result, and the document contains
+- **THEN** the tool returns a public GCS resource URL whose fetched content is a valid DOCX, and the document contains
   the headings as Word heading styles, the lists as Word list paragraphs, and
   the table with a styled header row
 
@@ -90,7 +91,7 @@ conversion.
 #### Scenario: Unfetchable remote image degrades gracefully
 
 - **WHEN** the input contains an image reference to an unreachable http(s) URL
-- **THEN** the tool still returns a valid DOCX file result, in which the image
+- **THEN** the tool still returns a public GCS resource URL whose fetched content is a valid DOCX, in which the image
   is replaced by its description (pandoc warns and continues)
 
 ### Requirement: Document title metadata
@@ -106,7 +107,7 @@ set it as the Word document's core title property.
 #### Scenario: Omitted title leaves a usable default
 
 - **WHEN** `convert_to_docx` is called without `title`
-- **THEN** the tool still returns a valid DOCX file result
+- **THEN** the tool still returns a public GCS resource URL whose fetched content is a valid DOCX
 
 ### Requirement: Error handling for invalid input
 
