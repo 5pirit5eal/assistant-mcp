@@ -23,13 +23,15 @@ pointers only.
 ## Commits
 
 Commit messages use the Conventional Commits types configured in
-`.releaserc`; semantic-release derives the version and the Cloud Run
+`.releaserc` (enforced by commitlint in CI); semantic-release derives the
+version and the Cloud Run
 deploy runs only on a release. Ship Cloud Run changes with a releasable
 type; other types deliberately stay undeployed.
 
 ## Verification
 
-CI (`.github/workflows/ci.yml`) runs ruff, mypy, pytest, actionlint, and a
+CI (`.github/workflows/ci.yml`) runs ruff, mypy, pytest, actionlint,
+markdownlint, commitlint, and a
 Docker build with the test suite inside the image; skipped tests fail the
 in-image run. Toolsets that wrap an external service (WebDAV, S3,
 third-party APIs): verify protocol and path conventions against the real

@@ -16,12 +16,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - name: Lint GitHub Actions workflows (actionlint 1.7.12)
         run: |
           curl -fsSL -o /tmp/actionlint.tar.gz \
             https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
           tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint
           /tmp/actionlint
+      - name: Lint markdown (markdownlint-cli2 0.24.0)
+        run: npx --yes markdownlint-cli2@0.24.0
+      - name: Lint commit messages (commitlint 21.2.4)
+        run: |
+          git fetch --tags origin
+          FROM=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)
+          npx --yes -p @commitlint/cli@21.2.4 -p @commitlint/config-conventional@21.2.4 \
+            commitlint --from="$FROM" --to=HEAD
       - uses: astral-sh/setup-uv@v10.3.0
         with:
           enable-cache: true

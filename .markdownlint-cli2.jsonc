@@ -1,0 +1,16 @@
+{
+  "config": {
+    "default": true,
+    "line-length": false,
+    "no-inline-html": false,
+    "first-line-h1": false,
+    "single-trailing-newline": true
+  },
+  "globs": ["**/*.md"],
+  "ignores": [
+    "**/.venv/**",
+    "**/node_modules/**",
+    "CHANGELOG.md",
+    ".vibe/**"
+  ]
+}
