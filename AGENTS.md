@@ -7,6 +7,8 @@ Modular FastMCP server (`src/assistant_mcp/`). Each toolset lives in
 and is registered in `TOOLSETS` (`src/assistant_mcp/toolsets/__init__.py`). Tool inputs are
 flat `Annotated[type, Field(...)]` parameters; outputs are structured
 (pydantic model, `Image`, or `ToolResult`), never plain strings;
+if possible implement tools async (offload blocking SDK calls via
+`asyncio.to_thread` so the event loop is never blocked);
 toolset modules hold no cross-request state, except `lru_cache`-wrapped
 client builders. Parameter descriptions, examples, output structure, and
 statelessness are enforced by `tests/test_toolsets.py`; tests drive tools
