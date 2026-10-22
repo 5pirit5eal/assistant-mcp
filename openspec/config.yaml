@@ -76,10 +76,6 @@ operations:
         notwendig). The retro itself (openspec-retro skill) is only run when
         the user triggers it manually.
       - >-
-        Tests that skip without a system tool (e.g. soffice) are not done
-        when they pass locally as skips: run them inside the built Docker
-        image before marking the change complete.
-      - >-
         When an implementation legitimately deviates from a task's described
         mechanism, update the task wording (or add a superseding task) before
         checking it off, so checked text and delivered code agree.
