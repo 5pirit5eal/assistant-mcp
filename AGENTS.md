@@ -6,12 +6,15 @@ Modular FastMCP server (`src/assistant_mcp/`). Each toolset lives in
 `src/assistant_mcp/toolsets/<name>.py`, exposes `mcp = FastMCP("<name>")`,
 and is registered in `TOOLSETS` (`src/assistant_mcp/toolsets/__init__.py`). Tool inputs are
 flat `Annotated[type, Field(...)]` parameters; outputs are structured
-(pydantic model, `Image`, `File`, or `ToolResult`), never plain strings;
+(pydantic model, `Image`, or `ToolResult`), never plain strings;
 toolset modules hold no cross-request state, except `lru_cache`-wrapped
 client builders. Parameter descriptions, examples, output structure, and
 statelessness are enforced by `tests/test_toolsets.py`; tests drive tools
 via `fastmcp.Client`. Helpers exchange pydantic models, not raw dicts or
-lists; use `Image` for images and `File` for binary content.
+lists; use `Image` for images. Binary artifacts (generated documents) are
+not embedded in tool results: they are uploaded to the public GCS document
+bucket via `toolsets/storage.py` and returned as a public resource URL
+(`GenerationResult.url`).
 
 ## Docs discipline
 

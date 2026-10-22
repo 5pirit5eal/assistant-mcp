@@ -11,43 +11,27 @@ from assistant_mcp.toolsets.storage import (
 )
 
 
-class _FakeWriter:
-    def __init__(self, bucket: _FakeBucket, object_name: str) -> None:
-        self._bucket = bucket
-        self.object_name = object_name
-        self.content_type: str | None = None
-        self.written = b""
-        self.fail_on_close = False
-
-    def write(self, data: bytes) -> int:
-        if not isinstance(data, (bytes, bytearray)):
-            raise TypeError("upload chunks must be bytes")
-        self.written += bytes(data)
-        return len(data)
-
-    def close(self) -> None:
-        if self.fail_on_close:
-            raise RuntimeError("writer close failed")
-        self._bucket.objects[self.object_name] = (self.content_type, self.written)
-
-
-class _FakeBucket:
-    def __init__(self) -> None:
-        self.objects: dict[str, tuple[str | None, bytes]] = {}
-
-    def object(self, name: str) -> _FakeObject:
-        return _FakeObject(self, name)
-
-
-class _FakeObject:
+class _FakeBlob:
     def __init__(self, bucket: _FakeBucket, name: str) -> None:
         self._bucket = bucket
         self._name = name
 
-    def new_writer(self, timeout: float = 10.0) -> _FakeWriter:
-        self._bucket.writer_timeouts = getattr(self._bucket, "writer_timeouts", [])
-        self._bucket.writer_timeouts.append(timeout)
-        return _FakeWriter(self._bucket, self._name)
+    def upload_from_string(
+        self, data, content_type: str = "text/plain", timeout: float = 60
+    ) -> None:
+        self._bucket.timeouts.append(timeout)
+        if not isinstance(data, (bytes, bytearray)):
+            raise TypeError("upload payload must be bytes")
+        self._bucket.objects[self._name] = (content_type, bytes(data))
+
+
+class _FakeBucket:
+    def __init__(self) -> None:
+        self.objects: dict[str, tuple[str, bytes]] = {}
+        self.timeouts: list[float] = []
+
+    def blob(self, name: str) -> _FakeBlob:
+        return _FakeBlob(self, name)
 
 
 class _FakeClient:
@@ -61,13 +45,8 @@ class _FakeClient:
 
 
 class _FailingClient:
-    def bucket(self, name: str) -> _FailingBucket:
+    def bucket(self, name: str) -> None:
         raise RuntimeError("storage backend unavailable")
-
-
-class _FailingBucket:
-    def object(self, name: str) -> None:
-        raise AssertionError("must not be reached")
 
 
 def _install_fake_client(monkeypatch, client) -> _FakeClient:
@@ -92,6 +71,7 @@ def test_upload_document_returns_public_url(monkeypatch):
     client = _install_fake_client(monkeypatch, _FakeClient())
     url = upload_document(b"%PDF-1.7 fake", "pdf/abc.pdf", "application/pdf")
     assert url == "https://storage.googleapis.com/test-bucket/pdf/abc.pdf"
+    assert client.bucket_name == "test-bucket"
     content_type, data = client.fake_bucket.objects["pdf/abc.pdf"]
     assert content_type == "application/pdf"
     assert data == b"%PDF-1.7 fake"
@@ -100,7 +80,7 @@ def test_upload_document_returns_public_url(monkeypatch):
 def test_upload_document_uses_ten_second_deadline(monkeypatch):
     client = _install_fake_client(monkeypatch, _FakeClient())
     upload_document(b"x", "pdf/a.pdf", "application/pdf")
-    assert client.fake_bucket.writer_timeouts == [10.0]
+    assert client.fake_bucket.timeouts == [10.0]
 
 
 def test_upload_document_missing_bucket_raises_tool_error(monkeypatch):
@@ -132,9 +112,7 @@ def test_get_storage_client_is_cached(monkeypatch):
         calls.append(1)
         return _CountingClient()
 
-    import assistant_mcp.toolsets.storage as storage_module
-
-    monkeypatch.setattr(storage_module, "_new_client", _build)
+    monkeypatch.setattr("assistant_mcp.toolsets.storage._new_client", _build)
     get_storage_client.cache_clear()
     first = get_storage_client()
     second = get_storage_client()

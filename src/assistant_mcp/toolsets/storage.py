@@ -40,10 +40,9 @@ def upload_document(data: bytes, object_name: str, content_type: str) -> str:
     bucket_name = _bucket_name()
     try:
         bucket = get_storage_client().bucket(bucket_name)
-        writer = bucket.object(object_name).new_writer(timeout=_UPLOAD_TIMEOUT_SECONDS)
-        writer.content_type = content_type
-        writer.write(data)
-        writer.close()
+        bucket.blob(object_name).upload_from_string(
+            data, content_type=content_type, timeout=_UPLOAD_TIMEOUT_SECONDS
+        )
     except ToolError:
         raise
     except Exception as exc:

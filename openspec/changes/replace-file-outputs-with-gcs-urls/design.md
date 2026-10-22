@@ -77,8 +77,10 @@ toolset, not registered in `TOOLSETS`):
 - `@lru_cache`-wrapped `get_storage_client()` (ADC — on Cloud Run this uses
   the runtime service account; mirrors swim-gen's `storage.NewClient(ctx)`)
 - `upload_document(data: bytes, name: str, content_type: str) -> str`:
-  uploads with a 10 s deadline (matching swim-gen's timeout), sets
-  `ContentType`, and returns the public object URL
+  uploads via `bucket.blob(name).upload_from_string(data,
+  content_type=..., timeout=10)` — the Python-SDK equivalent of
+  swim-gen's writer pattern (object writer + content type + 10 s
+  deadline) — and returns the public object URL
 - Missing/empty bucket config and upload failures raise `ToolError` with a
   meaningful message; no partial temp files persist.
 
