@@ -13,6 +13,7 @@ from fastmcp import Client
 
 from assistant_mcp import server as server_module
 from assistant_mcp.server import MCP_STATELESS_HTTP, build_server, resolve_stateless_http
+from assistant_mcp.toolsets.storage import GCS_BUCKET_ENV, PUBLIC_URL_TEMPLATE
 
 MCP_PATH = fastmcp.settings.streamable_http_path
 INITIALIZE_REQUEST = {
@@ -162,10 +163,16 @@ async def test_tools_remain_callable_in_memory_with_stateless_http_set(
     cleared_oauth_env, monkeypatch
 ):
     monkeypatch.setenv(MCP_STATELESS_HTTP, "true")
+    monkeypatch.setenv(GCS_BUCKET_ENV, "test-bucket")
+    async def fake_upload(data, object_name, content_type):
+        return PUBLIC_URL_TEMPLATE.format(bucket="test-bucket", object=object_name)
+
+    monkeypatch.setattr("assistant_mcp.toolsets.pdf.upload_document", fake_upload)
     server = build_server()
     async with Client(server) as client:
         result = await client.call_tool("pdf_generate_pdf", {"text": "Stateless probe text."})
     assert not result.is_error
+    assert result.structured_content["url"].endswith(".pdf")
 
 
 def test_main_wires_stateless_http_into_http_transport(monkeypatch):

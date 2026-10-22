@@ -2,18 +2,18 @@
 
 ## Purpose
 
-The MCP server's ability to produce visually polished PDF documents from structured text (plain text or Markdown) and return them as a structured MCP content response.
+The MCP server's ability to produce visually polished PDF documents from structured text (plain text or Markdown) and return them as a public GCS resource URL (see the `gcs-document-delivery` capability).
 
 ## Requirements
 
 ### Requirement: PDF generation from text
 
-The `generate_pdf` tool of the `pdf` toolset MUST generate a valid PDF document from a text input and return the PDF bytes as a structured MCP content response (not as base64 in text and not as a file path).
+The `generate_pdf` tool of the `pdf` toolset MUST generate a valid PDF document from a text input and return the public GCS resource URL of the uploaded PDF as structured content (not as base64 in text, not as embedded file bytes, and not as a file path).
 
 #### Scenario: Plain-text input generates a PDF
 
 - **WHEN** `generate_pdf` is called with plain text containing paragraphs (separated by blank lines)
-- **THEN** the tool returns valid PDF bytes as a structured MCP content response that begins with `%PDF-`
+- **THEN** the tool returns a public resource URL whose fetched content is a valid PDF that begins with `%PDF-`
 
 #### Scenario: Markdown input is fully rendered
 

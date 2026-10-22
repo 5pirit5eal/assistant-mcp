@@ -2,28 +2,28 @@
 
 ## Purpose
 
-The MCP server's ability to convert Microsoft Office files (DOCX, XLSX, PPTX) to PDF via base64 input and return them as a structured MCP content response - suitable for remote operation without a shared filesystem.
+The MCP server's ability to convert Microsoft Office files (DOCX, XLSX, PPTX) to PDF via base64 input and return them as a public GCS resource URL (see the `gcs-document-delivery` capability) - suitable for remote operation without a shared filesystem.
 
 ## Requirements
 
 ### Requirement: Conversion of Office formats to PDF
 
-The `convert_to_pdf` tool of the `pdf` toolset MUST convert a file passed as base64 in the DOCX, XLSX, and PPTX formats into a PDF and return the PDF bytes as a structured MCP content response.
+The `convert_to_pdf` tool of the `pdf` toolset MUST convert a file passed as base64 in the DOCX, XLSX, and PPTX formats into a PDF and return the public GCS resource URL of the uploaded PDF as structured content.
 
 #### Scenario: DOCX is converted
 
 - **WHEN** `convert_to_pdf` is called with the base64 encoding of a valid DOCX file
-- **THEN** the tool returns valid PDF bytes as a structured MCP content response that begins with `%PDF-`
+- **THEN** the tool returns a public resource URL whose fetched content is a valid PDF that begins with `%PDF-`
 
 #### Scenario: XLSX is converted
 
 - **WHEN** `convert_to_pdf` is called with the base64 encoding of a valid XLSX file
-- **THEN** the tool returns valid PDF bytes as a structured MCP content response
+- **THEN** the tool returns a public resource URL whose fetched content is a valid PDF
 
 #### Scenario: PPTX is converted
 
 - **WHEN** `convert_to_pdf` is called with the base64 encoding of a valid PPTX file
-- **THEN** the tool returns valid PDF bytes as a structured MCP content response
+- **THEN** the tool returns a public resource URL whose fetched content is a valid PDF
 
 ### Requirement: Error handling for invalid input
 

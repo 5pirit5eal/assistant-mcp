@@ -87,6 +87,16 @@ jobs:
             echo "  gh variable set MCP_ALLOWED_EMAILS --body 'you@example.com'" >&2
             exit 1
           fi
+      - name: Check storage bucket variable
+        env:
+          BUCKET_NAME: ${{ vars.GCS_BUCKET_NAME }}
+        run: |
+          if [ -z "$BUCKET_NAME" ]; then
+            echo "vars.GCS_BUCKET_NAME is not set." >&2
+            echo "Set it to the public document bucket, e.g.:" >&2
+            echo "  gh variable set GCS_BUCKET_NAME --body 'assistant-mcp-documents'" >&2
+            exit 1
+          fi
       - uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
@@ -127,7 +137,7 @@ jobs:
           region: europe-west1
           project_id: rubenschulze-sandbox
           image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
-          env_vars: MCP_TRANSPORT=http,MCP_BASE_URL=${{ env.MCP_BASE_URL }},MCP_ALLOWED_EMAILS=${{ vars.MCP_ALLOWED_EMAILS }},MCP_STATELESS_HTTP=true
+          env_vars: MCP_TRANSPORT=http,MCP_BASE_URL=${{ env.MCP_BASE_URL }},MCP_ALLOWED_EMAILS=${{ vars.MCP_ALLOWED_EMAILS }},MCP_STATELESS_HTTP=true,GCS_BUCKET_NAME=${{ vars.GCS_BUCKET_NAME }}
           flags: >-
             --allow-unauthenticated
             --service-account=assistant-mcp-runtime@rubenschulze-sandbox.iam.gserviceaccount.com

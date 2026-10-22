@@ -3,13 +3,15 @@
 import shutil
 import subprocess
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Annotated
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
-from fastmcp.utilities.types import File
-from pydantic import Field
+from pydantic import BaseModel, Field
+
+from assistant_mcp.toolsets.storage import upload_document
 
 mcp = FastMCP("docx")
 
@@ -20,10 +22,21 @@ _SUBPROCESS_TIMEOUT_SECONDS = 120
 _OUTPUT_FILENAME = "output.docx"
 _REFERENCE_DOCX_NAME = "docx_reference.docx"
 _STDERR_DETAIL_LIMIT = 2000
+_DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+class GenerationResult(BaseModel):
+    """Public resource URL of a generated document in the storage bucket."""
+
+    url: str = Field(
+        description="Public resource URL of the generated document in the "
+        "storage bucket. Bucket objects are deleted one month after creation.",
+        examples=["https://storage.googleapis.com/bucket/docx/object.docx"],
+    )
 
 
 @mcp.tool
-def convert_to_docx(
+async def convert_to_docx(
     content: Annotated[
         str,
         Field(
@@ -46,7 +59,7 @@ def convert_to_docx(
             examples=["Quarterly Report"],
         ),
     ] = None,
-) -> File:
+) -> GenerationResult:
     """Convert Markdown or HTML content to a styled Word document.
 
     Styling comes from a fixed shipped theme, identical for both input
@@ -55,11 +68,11 @@ def convert_to_docx(
     image URLs are fetched by the server during conversion (an image
     that cannot be fetched is replaced by its description). An optional
     title is stored as the file's title property and rendered as the
-    document's title block. Note: very large documents are limited by
-    the response size of the transport (about 32 MB on Cloud Run).
+    document's title block.
 
     Returns:
-        The generated DOCX as a downloadable file.
+        Public resource URL of the uploaded DOCX in the storage bucket
+        (bucket objects are deleted one month after creation).
     """
     if not content.strip():
         raise ToolError("content must not be empty")
@@ -97,4 +110,9 @@ def convert_to_docx(
         detail = process.stderr.decode(errors="replace").strip()[-_STDERR_DETAIL_LIMIT:]
         if process.returncode != 0 or not output.exists():
             raise ToolError(f"docx conversion failed: {detail or 'unknown error'}")
-        return File(data=output.read_bytes(), name=_OUTPUT_FILENAME, format="docx")
+        object_name = f"docx/{uuid.uuid4()}.docx"
+        return GenerationResult(
+            url=await upload_document(
+                output.read_bytes(), object_name, _DOCX_CONTENT_TYPE
+            )
+        )

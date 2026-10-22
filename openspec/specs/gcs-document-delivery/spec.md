@@ -1,0 +1,118 @@
+# gcs-document-delivery Specification
+
+## Purpose
+
+The MCP server's ability to deliver generated documents (PDF, DOCX) as public
+Google Cloud Storage resource URLs instead of embedded file content - documents
+are uploaded to a public read bucket whose objects are automatically deleted
+one month after creation, so tool results stay small and independent of
+transport payload limits.
+
+## Requirements
+
+### Requirement: Public GCS resource URL output
+
+The file-producing tools of the server - `generate_pdf`, `convert_to_pdf`
+(pdf toolset), and `convert_to_docx` (docx toolset) - MUST upload the
+generated document to a public Google Cloud Storage bucket and return a
+structured MCP content response containing the public resource URL of the
+uploaded object. The tools MUST NOT return the document bytes (base64
+file result or base64 text) to the caller; the resource URL is the only
+output option.
+
+#### Scenario: generate_pdf returns a resource URL
+
+- **WHEN** `generate_pdf` is called with Markdown or plain text
+- **THEN** the tool returns structured content with a single `url` field
+  pointing to the uploaded object, matching the public GCS URL template
+  `https://storage.googleapis.com/<bucket>/<object>` with a `.pdf` object
+
+#### Scenario: convert_to_pdf returns a resource URL
+
+- **WHEN** `convert_to_pdf` is called with the base64 encoding of a valid
+  DOCX, XLSX, or PPTX file
+- **THEN** the tool returns structured content with a single `url` field
+  pointing to the uploaded converted PDF
+
+#### Scenario: convert_to_docx returns a resource URL
+
+- **WHEN** `convert_to_docx` is called with Markdown or HTML content
+- **THEN** the tool returns structured content with a single `url` field
+  pointing to the uploaded object with a `.docx` object
+
+#### Scenario: Returned URL content matches the generated document
+
+- **WHEN** the URL returned by any of the three tools is fetched
+- **THEN** the response body is the generated document, served with the
+  correct content type (`application/pdf` or
+  `application/vnd.openxmlformats-officedocument.wordprocessingml.document`)
+
+### Requirement: Upload behavior and object naming
+
+The upload MUST use the storage client built from Application Default
+Credentials, MUST set the object's content type to the document's MIME
+type, and MUST name objects uniquely per call under a toolset-derived
+prefix, so no call overwrites another call's object and no cross-request
+state is held by the toolsets.
+
+#### Scenario: Objects are unique per call
+
+- **WHEN** `generate_pdf` is called twice with identical input
+- **THEN** the two returned URLs reference two distinct object paths
+
+#### Scenario: Content type is set on upload
+
+- **WHEN** `generate_pdf` uploads a document
+- **THEN** the stored object carries the content type `application/pdf`
+
+### Requirement: Storage configuration and failure handling
+
+The upload target MUST be configurable via a single environment variable
+(`GCS_BUCKET_NAME`) owned as a named constant by the storage helper module.
+If the variable is missing or empty, or the upload fails, the tool MUST
+return a meaningful error and MUST NOT crash the server.
+
+#### Scenario: Missing bucket configuration
+
+- **WHEN** any file-producing tool is called without `GCS_BUCKET_NAME` set
+- **THEN** the tool returns an error stating that the storage bucket is not
+  configured
+
+#### Scenario: Upload failure surfaces as a tool error
+
+- **WHEN** the storage backend rejects the upload
+- **THEN** the tool returns an error naming the failed upload, and the
+  server keeps serving subsequent requests
+
+### Requirement: Ephemeral public bucket with deletion policy
+
+The documents MUST be delivered from a public read bucket whose objects are
+automatically deleted after one month via a bucket-level GCS lifecycle rule;
+the server code itself MUST NOT depend on the retention window (it only
+uploads and returns URLs), and the policy MUST be documented in the
+project's README as part of the bucket setup.
+
+#### Scenario: Lifecycle rule is configured on the bucket
+
+- **WHEN** the bucket setup described in the README is applied
+- **THEN** the bucket grants public read on objects and carries a lifecycle
+  rule that deletes objects 30 days after creation
+
+#### Scenario: Server behavior is independent of the retention window
+
+- **WHEN** any file-producing tool uploads a document
+- **THEN** the upload and URL return succeed without the server reading or
+  enforcing the retention configuration
+
+### Requirement: Removal of embedded file results
+
+The `pdf` and `docx` toolsets MUST NOT produce embedded base64 file results
+(`File` content) for their outputs, and no unused file-result code paths
+shall remain in the toolset modules.
+
+#### Scenario: No file result is returned
+
+- **WHEN** a client calls `generate_pdf`, `convert_to_pdf`, or
+  `convert_to_docx` and inspects the tool result content blocks
+- **THEN** no embedded resource/blob content block carrying the document
+  bytes is present; the result is the structured URL response

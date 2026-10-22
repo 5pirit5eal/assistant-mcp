@@ -7,15 +7,15 @@ import re
 import shutil
 import subprocess
 import tempfile
+import uuid
 import zipfile
 from pathlib import Path
 from typing import Annotated
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
-from fastmcp.utilities.types import File
 from markdown_it import MarkdownIt
-from pydantic import Field
+from pydantic import BaseModel, Field
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -31,7 +31,22 @@ from reportlab.platypus import (
 from weasyprint import HTML as WeasyprintHTML
 from weasyprint.urls import URLFetcher
 
+from assistant_mcp.toolsets.storage import upload_document
+
 mcp = FastMCP("pdf")
+
+
+class GenerationResult(BaseModel):
+    """Public resource URL of a generated document in the storage bucket."""
+
+    url: str = Field(
+        description="Public resource URL of the generated document in the "
+        "storage bucket. Bucket objects are deleted one month after creation.",
+        examples=["https://storage.googleapis.com/bucket/pdf/object.pdf"],
+    )
+
+
+_PDF_CONTENT_TYPE = "application/pdf"
 
 _MD = MarkdownIt("commonmark").enable("table")
 _STYLES = getSampleStyleSheet()
@@ -310,7 +325,7 @@ def _markdown_to_story(markdown: str) -> list:
 
 
 @mcp.tool
-def generate_pdf(
+async def generate_pdf(
     text: Annotated[
         str,
         Field(
@@ -329,9 +344,9 @@ def generate_pdf(
             examples=["auto"],
         ),
     ] = "auto",
-) -> File:
-    """Generate a PDF from Markdown, plain text, or HTML and return it as
-    a file.
+) -> GenerationResult:
+    """Generate a PDF from Markdown, plain text, or HTML and return its
+    public resource URL.
 
     Markdown supports headings, paragraphs, bullet and ordered lists,
     tables, code blocks, links, bold and italic. Math superscripts: a
@@ -358,7 +373,8 @@ def generate_pdf(
             "html" override detection explicitly.
 
     Returns:
-        The generated PDF as a downloadable file.
+        Public resource URL of the uploaded PDF in the storage bucket
+        (bucket objects are deleted one month after creation).
     """
     if not text.strip():
         raise ToolError("text must not be empty")
@@ -371,11 +387,14 @@ def generate_pdf(
         data = _render_html_to_pdf(text)
     else:
         data = _build_pdf(_markdown_to_story(text))
-    return File(data=data, name="output.pdf", format="pdf")
+    object_name = f"pdf/{uuid.uuid4()}.pdf"
+    return GenerationResult(
+        url=await upload_document(data, object_name, _PDF_CONTENT_TYPE)
+    )
 
 
 @mcp.tool
-def convert_to_pdf(
+async def convert_to_pdf(
     content: Annotated[
         str,
         Field(
@@ -390,7 +409,7 @@ def convert_to_pdf(
             examples=["docx"],
         ),
     ],
-) -> File:
+) -> GenerationResult:
     """Convert a Microsoft Office file (DOCX, XLSX, PPTX) to PDF.
 
     The file content is passed as base64 so the tool works remotely
@@ -398,7 +417,8 @@ def convert_to_pdf(
     by the request size of the transport (about 32 MB on Cloud Run).
 
     Returns:
-        The converted PDF as a downloadable file.
+        Public resource URL of the uploaded PDF in the storage bucket
+        (bucket objects are deleted one month after creation).
     """
     fmt = format.lower().strip(".")
     if fmt not in _SUPPORTED_FORMATS:
@@ -440,4 +460,9 @@ def convert_to_pdf(
         if process.returncode != 0 or not result_file.exists():
             detail = process.stderr.decode(errors="replace").strip()
             raise ToolError(f"conversion failed for {fmt}: {detail or 'unknown error'}")
-        return File(data=result_file.read_bytes(), name="output.pdf", format="pdf")
+        object_name = f"pdf/{uuid.uuid4()}.pdf"
+        return GenerationResult(
+            url=await upload_document(
+                result_file.read_bytes(), object_name, _PDF_CONTENT_TYPE
+            )
+        )

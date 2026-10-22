@@ -1,12 +1,13 @@
 [project]
 name = "assistant-mcp"
-version = "0.3.0"
+version = "0.4.0"
 description = "Modular MCP server built on FastMCP, deployed on Cloud Run"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "fastmcp>=4.1.0",
     "google-cloud-firestore>=2.34.1",
+    "google-cloud-storage>=3.1.0",
     "markdown-it-py>=3.0.0",
     "pydantic>=2",
     "reportlab>=4.2.0",
@@ -54,4 +55,8 @@ python_version = "3.14"
 
 [[tool.mypy.overrides]]
 module = ["weasyprint", "weasyprint.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "google.cloud.storage"
 ignore_missing_imports = true
