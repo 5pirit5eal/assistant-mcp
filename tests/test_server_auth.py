@@ -1,7 +1,6 @@
 """HTTP token enforcement tests for the assembled server."""
 
 import asyncio
-import base64
 import io
 import socket
 import threading
@@ -27,6 +26,24 @@ from assistant_mcp.auth import (
     create_auth_provider,
 )
 from assistant_mcp.server import build_server
+from assistant_mcp.toolsets.storage import GCS_BUCKET_ENV, PUBLIC_URL_TEMPLATE
+
+_UPLOADS: dict[str, tuple[str, bytes]] = {}
+
+
+@pytest.fixture(autouse=True)
+def fake_storage(monkeypatch):
+    """Capture uploads so URL outputs can be verified without hitting GCS."""
+    _UPLOADS.clear()
+    monkeypatch.setenv(GCS_BUCKET_ENV, "test-bucket")
+
+    async def fake_upload(data: bytes, object_name: str, content_type: str) -> str:
+        _UPLOADS[object_name] = (content_type, bytes(data))
+        return PUBLIC_URL_TEMPLATE.format(bucket="test-bucket", object=object_name)
+
+    monkeypatch.setattr("assistant_mcp.toolsets.pdf.upload_document", fake_upload)
+    yield
+    _UPLOADS.clear()
 
 STUB_TOKEN = "stub-valid-token"
 OAUTH_ENV = {
@@ -116,9 +133,11 @@ async def test_authenticated_client_calls_generate_pdf(stub_auth_server):
             {"text": "Erster Absatz.\n\nZweiter Absatz mit mehr Text."},
         )
     assert not result.is_error
-    block = result.content[0]
-    assert block.type == "resource"
-    pdf = base64.b64decode(block.resource.blob)
+    url = result.structured_content["url"]
+    assert url.startswith("https://storage.googleapis.com/") and url.endswith(".pdf")
+    object_name = url.removeprefix("https://storage.googleapis.com/test-bucket/")
+    content_type, pdf = _UPLOADS[object_name]
+    assert content_type == "application/pdf"
     assert pdf.startswith(b"%PDF-")
     reader = PdfReader(io.BytesIO(pdf))
     text = "\n".join(page.extract_text() or "" for page in reader.pages)

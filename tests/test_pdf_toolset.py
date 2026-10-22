@@ -7,12 +7,47 @@ from pathlib import Path
 
 import pytest
 from fastmcp import Client
+from fastmcp.exceptions import ToolError
 from pypdf import PdfReader
 
 from assistant_mcp.toolsets.pdf import mcp
+from assistant_mcp.toolsets.storage import (
+    GCS_BUCKET_ENV,
+    PUBLIC_URL_TEMPLATE,
+    upload_document,
+)
 
 SOFFICE = shutil.which("soffice")
 FIXTURES = Path(__file__).parent / "fixtures"
+TEST_BUCKET = "test-bucket"
+
+_UPLOADS: dict[str, tuple[str, bytes]] = {}
+
+
+@pytest.fixture(autouse=True)
+def fake_storage(monkeypatch):
+    """Capture uploads and return public URLs instead of hitting GCS."""
+    _UPLOADS.clear()
+    monkeypatch.setenv(GCS_BUCKET_ENV, TEST_BUCKET)
+
+    async def fake_upload(data: bytes, object_name: str, content_type: str) -> str:
+        _UPLOADS[object_name] = (content_type, bytes(data))
+        return PUBLIC_URL_TEMPLATE.format(bucket=TEST_BUCKET, object=object_name)
+
+    monkeypatch.setattr("assistant_mcp.toolsets.pdf.upload_document", fake_upload)
+    yield
+    _UPLOADS.clear()
+
+
+def _object_name(url: str) -> str:
+    prefix = PUBLIC_URL_TEMPLATE.format(bucket=TEST_BUCKET, object="")
+    assert url.startswith(prefix), url
+    return url[len(prefix):]
+
+
+def _url(result) -> str:
+    assert not result.is_error
+    return result.structured_content["url"]
 
 
 def _fixture_b64(name: str) -> str:
@@ -20,9 +55,7 @@ def _fixture_b64(name: str) -> str:
 
 
 def _pdf_bytes(result) -> bytes:
-    block = result.content[0]
-    assert block.type == "resource"
-    return base64.b64decode(block.resource.blob)
+    return _UPLOADS[_object_name(_url(result))][1]
 
 
 def _read_pdf(result) -> PdfReader:
@@ -44,6 +77,51 @@ async def call_generate_pdf_error(text: str):
         result = await client.call_tool("generate_pdf", {"text": text}, raise_on_error=False)
         assert result.is_error
         return result
+
+
+async def test_generate_pdf_returns_public_resource_url():
+    result = await call_generate_pdf("Erster Absatz.\n\nZweiter Absatz mit mehr Text.")
+    assert not result.is_error
+    url = _url(result)
+    assert url.startswith(
+        f"https://storage.googleapis.com/{TEST_BUCKET}/pdf/"
+    ) and url.endswith(".pdf")
+    assert all(block.type != "resource" for block in result.content)
+    content_type, data = _UPLOADS[_object_name(url)]
+    assert content_type == "application/pdf"
+    assert data.startswith(b"%PDF-")
+
+
+async def test_generate_pdf_unique_object_per_call():
+    first = _url(await call_generate_pdf("Gleicher Text"))
+    second = _url(await call_generate_pdf("Gleicher Text"))
+    assert first != second
+
+
+async def test_generate_pdf_upload_failure_returns_tool_error(monkeypatch):
+    async def failing_upload(data, object_name, content_type):
+        raise ToolError("upload to storage bucket failed: backend unavailable")
+
+    monkeypatch.setattr(
+        "assistant_mcp.toolsets.pdf.upload_document", failing_upload
+    )
+    result = await call_generate_pdf_error("Text")
+    assert result.is_error
+    assert "upload" in result.content[0].text
+
+
+async def test_generate_pdf_missing_bucket_returns_tool_error(monkeypatch):
+    monkeypatch.delenv(GCS_BUCKET_ENV, raising=False)
+
+    async def real_upload_without_bucket(data, object_name, content_type):
+        return await upload_document(data, object_name, content_type)
+
+    monkeypatch.setattr(
+        "assistant_mcp.toolsets.pdf.upload_document", real_upload_without_bucket
+    )
+    result = await call_generate_pdf_error("Text")
+    assert result.is_error
+    assert "bucket" in result.content[0].text
 
 
 async def test_generate_pdf_plain_text_returns_pdf_bytes():
@@ -241,11 +319,16 @@ async def test_convert_to_pdf_unsupported_format_returns_error():
 
 
 @pytest.mark.skipif(SOFFICE is None, reason="soffice not available in this environment")
-async def test_convert_to_pdf_docx_returns_pdf():
+async def test_convert_to_pdf_docx_returns_url():
     result = await call_convert_to_pdf(_fixture_b64("sample.docx"), "docx")
     assert not result.is_error, result.content[0].text
-    pdf = _pdf_bytes(result)
-    assert pdf.startswith(b"%PDF-")
+    url = _url(result)
+    assert url.startswith(
+        f"https://storage.googleapis.com/{TEST_BUCKET}/pdf/"
+    ) and url.endswith(".pdf")
+    content_type, data = _UPLOADS[_object_name(url)]
+    assert content_type == "application/pdf"
+    assert data.startswith(b"%PDF-")
 
 
 @pytest.mark.skipif(SOFFICE is None, reason="soffice not available in this environment")

@@ -12,13 +12,23 @@ src/assistant_mcp/
 │   ├── __init__.py  # Toolset-Registry
 │   ├── docx.py      # DOCX-Toolset: Markdown/HTML-to-DOCX (pandoc)
 │   ├── docx_reference.docx  # Word-Theme des DOCX-Toolsets (mitgeliefert)
-│   └── pdf.py       # PDF-Toolset: Markdown-to-PDF und Office-to-PDF
+│   ├── pdf.py       # PDF-Toolset: Markdown-to-PDF und Office-to-PDF
+│   ├── storage.py   # GCS-Upload-Helper: liefert öffentliche Objekt-URLs
 └── ...
 ```
 
 Jedes Toolset ist ein eigenes Modul mit einer FastMCP-Instanz; neue Toolsets werden in
 `toolsets/__init__.py` registriert und automatisch vom Server gemountet. Das PDF-Toolset
 dient dabei als Referenzimplementierung.
+
+Die dateierzeugenden Tools (`generate_pdf`, `convert_to_pdf`, `convert_to_docx`)
+liefern ihre Dokumente nicht mehr eingebettet zurück, sondern laden sie in einen
+öffentlichen GCS-Bucket hoch und geben die öffentliche Objekt-URL
+(`https://storage.googleapis.com/<bucket>/<objekt>`) als strukturiertes Ergebnis
+(`url`-Feld) zurück. Der Ziels-Bucket wird über die Umgebungsvariable
+`GCS_BUCKET_NAME` konfiguriert (fehlende Konfiguration führt zu einem Tool-Fehler).
+Die Objekte im Bucket sind bewusst öffentlich lesbar und werden per Bucket-Lifecycle-
+Regel automatisch nach einem Monat gelöscht.
 
 Das DOCX-Toolset (`convert_to_docx(content, format, title)`) konvertiert Markdown oder
 HTML (`format` = `"markdown"` oder `"html"`) per `pandoc` in ein einheitlich gestyltes
@@ -260,6 +270,38 @@ fehlenden Variablen.
    gh variable set MCP_ALLOWED_EMAILS \
      --repo 5pirit5eal/assistant-mcp \
      --body "you@example.com,other@example.com"
+   ```
+
+7. **Öffentlichen Dokumenten-Bucket** anlegen (`europe-west1`, Uniform Access,
+   öffentliches Lesen, Lifecycle-Regel löscht Objekte nach 30 Tagen) und dem
+   Runtime-Service-Account Schreibrechte geben:
+
+   ```bash
+   gcloud storage buckets create gs://assistant-mcp-documents \
+     --project=rubenschulze-sandbox --location=europe-west1 \
+     --public-access-prevention=insecure \
+     --default-storage-class=STANDARD
+
+   gcloud storage buckets add-iam-policy-binding gs://assistant-mcp-documents \
+     --member="allUsers" --role="roles/storage.objectViewer"
+
+   gcloud storage buckets add-iam-policy-binding gs://assistant-mcp-documents \
+     --member="serviceAccount:assistant-mcp-runtime@rubenschulze-sandbox.iam.gserviceaccount.com" \
+     --role="roles/storage.objectCreator"
+
+   echo '{"rule": [{"action": {"type": "Delete"}, "condition": {"age": 30}}]}' > lifecycle.json
+   gcloud storage buckets update gs://assistant-mcp-documents --lifecycle-file=lifecycle.json
+   rm lifecycle.json
+   ```
+
+   Der Bucket-Name wird als GitHub-Repository-Variable hinterlegt (der Workflow
+   liest sie als `vars.GCS_BUCKET_NAME`, prüft sie und reicht sie als
+   `GCS_BUCKET_NAME` an Cloud Run weiter):
+
+   ```bash
+   gh variable set GCS_BUCKET_NAME \
+     --repo 5pirit5eal/assistant-mcp \
+     --body "assistant-mcp-documents"
    ```
 
 ### MCP-Clients: Verbinden und Einloggen
