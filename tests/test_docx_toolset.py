@@ -17,17 +17,41 @@ from docx import Document
 from fastmcp import Client
 
 from assistant_mcp.toolsets.docx import (
-    _OUTPUT_FILENAME,
     _PANDOC_BINARY,
     _REFERENCE_DOCX_NAME,
     _SUPPORTED_FORMATS,
     mcp,
 )
+from assistant_mcp.toolsets.storage import GCS_BUCKET_ENV, PUBLIC_URL_TEMPLATE
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 MARKDOWN_FORMAT = _SUPPORTED_FORMATS[0]
 HTML_FORMAT = _SUPPORTED_FORMATS[1]
 PANDOC = shutil.which(_PANDOC_BINARY)
+TEST_BUCKET = "test-bucket"
+
+_UPLOADS: dict[str, tuple[str, bytes]] = {}
+
+
+@pytest.fixture(autouse=True)
+def fake_storage(monkeypatch):
+    """Capture uploads and return public URLs instead of hitting GCS."""
+    _UPLOADS.clear()
+    monkeypatch.setenv(GCS_BUCKET_ENV, TEST_BUCKET)
+
+    def fake_upload(data: bytes, object_name: str, content_type: str) -> str:
+        _UPLOADS[object_name] = (content_type, bytes(data))
+        return PUBLIC_URL_TEMPLATE.format(bucket=TEST_BUCKET, object=object_name)
+
+    monkeypatch.setattr("assistant_mcp.toolsets.docx.upload_document", fake_upload)
+    yield
+    _UPLOADS.clear()
+
+
+def _object_name(url: str) -> str:
+    prefix = PUBLIC_URL_TEMPLATE.format(bucket=TEST_BUCKET, object="")
+    assert url.startswith(prefix), url
+    return url[len(prefix):]
 
 # Known-good 1x1 transparent PNG, verified against pandoc 3.12.1.
 PIXEL_PNG_B64 = (
@@ -122,17 +146,20 @@ def test_theme_asset_table_style_has_zebra_striping():
 
 
 def _docx_bytes(result) -> bytes:
-    block = result.content[0]
-    assert block.type == "resource"
-    return base64.b64decode(block.resource.blob)
+    return _UPLOADS[_object_name(_url(result))][1]
 
 
-def _assert_output_filename(result) -> None:
-    block = result.content[0]
-    assert block.type == "resource"
-    assert _OUTPUT_FILENAME in str(block.resource.uri), (
-        f"returned file must be named {_OUTPUT_FILENAME}, got {block.resource.uri}"
-    )
+def _url(result) -> str:
+    assert not result.is_error
+    return result.structured_content["url"]
+
+
+def _assert_public_url(result) -> None:
+    url = _url(result)
+    assert url.startswith(
+        f"https://storage.googleapis.com/{TEST_BUCKET}/docx/"
+    ) and url.endswith(".docx")
+    assert all(block.type != "resource" for block in result.content)
 
 
 def _read_docx(result) -> Document:
@@ -178,7 +205,7 @@ MARKDOWN_COMMON_ELEMENTS = (
 async def test_convert_markdown_common_elements():
     result = await _call_convert(MARKDOWN_COMMON_ELEMENTS, MARKDOWN_FORMAT)
     assert not result.is_error
-    _assert_output_filename(result)
+    _assert_public_url(result)
     document = _read_docx(result)
 
     headings = [p for p in document.paragraphs if p.style.name == "Heading 1"]
@@ -326,7 +353,7 @@ HTML_COMMON_ELEMENTS = (
 async def test_convert_html_common_elements():
     result = await _call_convert(HTML_COMMON_ELEMENTS, HTML_FORMAT)
     assert not result.is_error
-    _assert_output_filename(result)
+    _assert_public_url(result)
     document = _read_docx(result)
 
     heading_styles = {

@@ -76,6 +76,25 @@ return a meaningful error and MUST NOT crash the server.
 - **THEN** the tool returns an error naming the failed upload, and the
   server keeps serving subsequent requests
 
+### Requirement: Ephemeral public bucket with deletion policy
+
+The documents MUST be delivered from a public read bucket whose objects are
+automatically deleted after one month via a bucket-level GCS lifecycle rule;
+the server code itself MUST NOT depend on the retention window (it only
+uploads and returns URLs), and the policy MUST be documented in the
+project's README as part of the bucket setup.
+
+#### Scenario: Lifecycle rule is configured on the bucket
+
+- **WHEN** the bucket setup described in the README is applied
+- **THEN** the bucket grants public read on objects and carries a lifecycle
+  rule that deletes objects 30 days after creation
+
+#### Scenario: Server behavior is independent of the retention window
+- **WHEN** any file-producing tool uploads a document
+- **THEN** the upload and URL return succeed without the server reading or
+  enforcing the retention configuration
+
 ### Requirement: Removal of embedded file results
 
 The `pdf` and `docx` toolsets MUST NOT produce embedded base64 file results

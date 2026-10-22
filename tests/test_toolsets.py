@@ -1,13 +1,31 @@
 import ast
-import base64
 import io
 from pathlib import Path
 
+import pytest
 from fastmcp import Client
 from pypdf import PdfReader
 
 from assistant_mcp.server import build_server
 from assistant_mcp.toolsets import TOOLSETS
+from assistant_mcp.toolsets.storage import GCS_BUCKET_ENV, PUBLIC_URL_TEMPLATE
+
+_UPLOADS: dict[str, tuple[str, bytes]] = {}
+
+
+@pytest.fixture(autouse=True)
+def fake_storage(monkeypatch):
+    """Capture uploads so URL outputs can be verified without hitting GCS."""
+    _UPLOADS.clear()
+    monkeypatch.setenv(GCS_BUCKET_ENV, "test-bucket")
+
+    def fake_upload(data: bytes, object_name: str, content_type: str) -> str:
+        _UPLOADS[object_name] = (content_type, bytes(data))
+        return PUBLIC_URL_TEMPLATE.format(bucket="test-bucket", object=object_name)
+
+    monkeypatch.setattr("assistant_mcp.toolsets.pdf.upload_document", fake_upload)
+    yield
+    _UPLOADS.clear()
 
 TOOLSETS_SRC_DIR = Path(__file__).parent.parent / "src" / "assistant_mcp" / "toolsets"
 MUTATING_METHODS = frozenset(
@@ -171,14 +189,19 @@ async def test_registry_compliance_tool_parameters_and_outputs():
 DETERMINISM_MARKDOWN = "# Determinism Probe\n\nFirst paragraph.\n\n- item one\n- item two\n"
 
 
-async def test_two_server_instances_return_identical_tool_results(cleared_oauth_env):
+async def test_two_server_instances_return_identical_tool_results(
+    cleared_oauth_env, fake_storage
+):
     extracted_texts = []
     for _ in range(2):
         server = build_server()
         async with Client(server) as client:
             result = await client.call_tool("pdf_generate_pdf", {"text": DETERMINISM_MARKDOWN})
         assert not result.is_error
-        pdf = base64.b64decode(result.content[0].resource.blob)
+        url = result.structured_content["url"]
+        assert url.startswith("https://storage.googleapis.com/") and url.endswith(".pdf")
+        object_name = url.removeprefix("https://storage.googleapis.com/test-bucket/")
+        pdf = _UPLOADS[object_name][1]
         reader = PdfReader(io.BytesIO(pdf))
         extracted_texts.append("\n".join(page.extract_text() or "" for page in reader.pages))
     assert "Determinism Probe" in extracted_texts[0]

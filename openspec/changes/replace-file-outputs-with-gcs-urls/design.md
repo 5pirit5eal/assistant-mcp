@@ -35,7 +35,9 @@ Non-Goals:
 
 - Changing the base64 *input* of `convert_to_pdf` or data-URI image inputs.
 - Signed URLs / authenticated browser downloads (bucket is public).
-- Object lifecycle policies, retention, or deletion (see Open Questions).
+- Enforcement of the retention policy in code: the 1-month deletion is a
+  bucket-level GCS lifecycle rule (ops concern); the server only documents
+  it.
 
 ## Decisions
 
@@ -49,9 +51,9 @@ returns the durable public object URL
 `https://storage.googleapis.com/<bucket>/<object>` (constant
 `GCS_PUBLIC_URL_TEMPLATE`), not a signed URL.
 
-**Assumption (user decision pending, timed out during proposal):** the bucket
-is intentionally public. If confidentiality is later required, swapping the
-helper to `bucket.sign_url` (V4, GET, short expiry) is a contained change.
+**Confirmed by the user:** the bucket is intentionally public (read access
+for all users). If confidentiality is later required, swapping the helper to
+`bucket.sign_url` (V4, GET, short expiry) is a contained change.
 
 ### D2: Output model
 
@@ -92,8 +94,13 @@ per-call UUIDs avoid cross-request state and collisions.
 
 | Value | Delivery |
 |---|---|
-| `GCS_BUCKET_NAME` | plain env var on Cloud Run, added to `env_vars` in `.github/workflows/deploy.yml` (not a secret — it is not sensitive and appears in public URLs) |
-| Bucket exists, public (uniform, `allUsers: objectViewer`), region `europe-west1` | one-time manual GCP setup documented in README (the deploy workflow itself needs no new permissions; the *runtime* service account needs `roles/storage.objectCreator` on the bucket) |
+| `GCS_BUCKET_NAME` | repository variable `vars.GCS_BUCKET_NAME` delivered as a plain env var on Cloud Run via `env_vars` in `.github/workflows/deploy.yml`, with a workflow check step mirroring the existing `MCP_ALLOWED_EMAILS` pattern (not a secret — it is not sensitive and appears in public URLs) |
+| Bucket exists, region `europe-west1`, uniform access, public read (`allUsers: objectViewer`), lifecycle rule deleting objects after 30 days | one-time manual GCP setup documented in README (the deploy workflow itself needs no new permissions; the *runtime* service account needs `roles/storage.objectCreator` on the bucket) |
+
+The 30-day deletion policy was confirmed by the user: documents in the
+public bucket are ephemeral by design; the lifecycle rule is bucket-level
+configuration (`Age + Delete` after 30 days), documented as a rollout task
+and surfaced in the tool descriptions via the README.
 
 Config/workflow files are exempt from TDD per openspec config rules; the
 workflow edit is validated by review/actionlint.
@@ -137,9 +144,5 @@ together with the new env var.
 
 ## Open Questions
 
-- **Bucket lifecycle policy:** generated objects accumulate indefinitely.
-  Propose a bucket-level age-based lifecycle rule (ops concern, outside this
-  repo); not blocking the change.
-- Confirm whether the user wants signed URLs instead of public URLs once the
-  earlier clarification (timed out) is answered; the assumption is recorded in
-  D1 and the swap is contained to `upload_document`.
+None — the open points from the proposal were decided by the user: public
+read bucket with a 30-day deletion policy (bucket-level lifecycle rule).
