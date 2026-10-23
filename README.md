@@ -290,7 +290,7 @@ fehlenden Variablen.
    ```bash
    gcloud storage buckets create gs://assistant-mcp-documents \
      --project=rubenschulze-sandbox --location=europe-west1 \
-     --public-access-prevention=insecure \
+     --no-public-access-prevention \
      --default-storage-class=STANDARD
 
    gcloud storage buckets add-iam-policy-binding gs://assistant-mcp-documents \
@@ -364,7 +364,7 @@ gcloud iam workload-identity-pools create github-actions \
 gcloud iam workload-identity-pools providers create-oidc github-com \
   --location=global --workload-identity-pool=github-actions \
   --project=rubenschulze-sandbox \
-  --issuer="https://token.actions.githubusercontent.com" \
+  --issuer-uri="https://token.actions.githubusercontent.com" \
   --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
   --attribute-condition="assertion.repository == '5pirit5eal/assistant-mcp'"
 

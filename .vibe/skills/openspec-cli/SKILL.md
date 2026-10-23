@@ -1,6 +1,6 @@
 ---
 name: openspec-cli
-description: Shared OpenSpec CLI basics for the openspec-* workflow skills: --store selection, the project-root check, change selection, and capability paths. Load this skill before following any openspec-* workflow skill that points here.
+description: Shared OpenSpec CLI basics for the openspec-* workflow skills; --store selection, the project-root check, change selection, and capability paths. Load this skill before following any openspec-* workflow skill that points here.
 user-invocable: false
 allowed-tools: Bash(openspec:*)
 license: MIT
