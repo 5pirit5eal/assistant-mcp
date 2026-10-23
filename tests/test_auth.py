@@ -8,11 +8,14 @@ from fastmcp.server.auth import AccessToken, TokenVerifier
 from key_value.aio.stores.memory import MemoryStore
 
 from assistant_mcp.auth import (
+    DEFAULT_REFRESH_GRACE_SECONDS,
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET,
+    MCP_ACCESS_TOKEN_TTL_SECONDS,
     MCP_ALLOWED_EMAILS,
     MCP_BASE_URL,
     MCP_OAUTH_STORAGE_KEY,
+    MCP_REFRESH_GRACE_SECONDS,
     OAUTH_CACHE_TTL_SECONDS,
     OAUTH_ENV_VARS,
     AllowlistGoogleProvider,
@@ -49,6 +52,10 @@ def test_env_var_constants_cover_the_activation_contract():
     )
 
 
+def test_default_refresh_grace_matches_spec_default():
+    assert DEFAULT_REFRESH_GRACE_SECONDS == 60
+
+
 def test_unconfigured_environment_returns_no_auth():
     provider = create_auth_provider(env={}, storage_backend=MemoryStore())
     assert provider is None
@@ -80,6 +87,20 @@ def test_non_absolute_https_base_url_is_rejected(base_url):
 def test_invalid_storage_key_fails_fast():
     env = complete_env() | {MCP_OAUTH_STORAGE_KEY: "not-a-fernet-key"}
     with pytest.raises(AuthConfigError, match=MCP_OAUTH_STORAGE_KEY):
+        create_auth_provider(env=env, storage_backend=MemoryStore())
+
+
+@pytest.mark.parametrize("value", ["0", "-5", "abc", "2.5"])
+def test_invalid_access_token_ttl_fails_fast(value):
+    env = complete_env() | {MCP_ACCESS_TOKEN_TTL_SECONDS: value}
+    with pytest.raises(AuthConfigError, match=MCP_ACCESS_TOKEN_TTL_SECONDS):
+        create_auth_provider(env=env, storage_backend=MemoryStore())
+
+
+@pytest.mark.parametrize("value", ["0", "-5", "abc", "2.5"])
+def test_invalid_refresh_grace_fails_fast(value):
+    env = complete_env() | {MCP_REFRESH_GRACE_SECONDS: value}
+    with pytest.raises(AuthConfigError, match=MCP_REFRESH_GRACE_SECONDS):
         create_auth_provider(env=env, storage_backend=MemoryStore())
 
 

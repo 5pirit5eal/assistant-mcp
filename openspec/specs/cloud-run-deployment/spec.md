@@ -8,7 +8,7 @@ Defines how the assistant-mcp server is deployed to Google Cloud Run automatical
 
 ### Requirement: Automated deployment on main and on demand
 
-The system SHALL deploy to Google Cloud Run when a full GitHub release is published from `main` and via a manual workflow trigger. A deployment MUST check out the release tag, build the container image, publish it to the project's Artifact Registry repository in `europe-west1` under both a release version tag and a commit SHA tag, and roll it out to the Cloud Run service `assistant-mcp` in region `europe-west1` (project `rubenschulze-sandbox`) with unauthenticated ingress access allowed, `MCP_TRANSPORT=http` set, and the OAuth configuration injected: the Google client ID, client secret, and OAuth storage encryption key as environment variables sourced from Google Secret Manager, the public base URL of the service as a plain environment variable, and the account allowlist as a plain environment variable sourced from the repository's `MCP_ALLOWED_EMAILS` variable.
+The system SHALL deploy to Google Cloud Run when a full GitHub release is published from `main` and via a manual workflow trigger. A deployment MUST check out the release tag, build the container image, publish it to the project's Artifact Registry repository in `europe-west1` under both a release version tag and a commit SHA tag, and roll it out to the Cloud Run service `assistant-mcp` in region `europe-west1` (project `rubenschulze-sandbox`) with unauthenticated ingress access allowed, `MCP_TRANSPORT=http` set, and the OAuth configuration injected: the Google client ID, client secret, and OAuth storage encryption key as environment variables sourced from Google Secret Manager, the public base URL of the service as a plain environment variable sourced from the repository's `MCP_BASE_URL` variable, and the account allowlist as a plain environment variable sourced from the repository's `MCP_ALLOWED_EMAILS` variable. The deployment MUST NOT resolve the public base URL from the live Cloud Run service at deploy time; the injected value MUST be identical across deployments so that the OAuth issuer, token audience, and resource identifier never change between deploys. A deployment MUST fail fast with a clear error when the `MCP_BASE_URL` repository variable is unset or empty.
 
 #### Scenario: Green push to main deploys
 
@@ -19,6 +19,16 @@ The system SHALL deploy to Google Cloud Run when a full GitHub release is publis
 
 - **WHEN** a deployment is triggered manually with no code changes
 - **THEN** the workflow builds, publishes, and deploys the current state of `main`
+
+#### Scenario: Base URL is stable across deploys
+
+- **WHEN** two consecutive deployments deliver the OAuth configuration
+- **THEN** both revisions receive the same `MCP_BASE_URL` value, sourced from the repository variable, without querying the live service
+
+#### Scenario: Missing base URL variable blocks the deployment
+
+- **WHEN** a deployment runs and the `MCP_BASE_URL` repository variable is unset or empty
+- **THEN** the workflow fails before deploying anything and names the missing variable and how to set it
 
 ### Requirement: Deployment only after verification
 

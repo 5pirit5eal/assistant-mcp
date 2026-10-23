@@ -39,6 +39,12 @@ rules:
       known-good example - never recomputed the same way the code computes them.
     - >-
       Refactoring is not part of the test-first cycle; it belongs to review.
+    - >-
+      No task may require a release, deploy, or other post-merge event to be
+      checked off: work ends at creating a (draft) PR and letting CI verify
+      the branch. Where only a real deploy/release can verify, state that
+      gate in the proposal as a manual post-merge check the user performs;
+      a failure there is a separate bugfix change.
   design:
     - >-
       Document which public interfaces of the system the tests will target and
