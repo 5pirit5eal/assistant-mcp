@@ -66,3 +66,14 @@ written in English.
   against the first real Cloud Run cold start is a known follow-up,
   deliberately out of scope of the stateless-startup-probe change;
   adjust the deploy workflow flags together.
+
+## Deliberately deferred (oauth refresh rotation)
+
+- The in-flight refresh-rotation race inside a single rotation's Firestore
+  roundtrip (two parallel refreshes that both pass the grace check before
+  the winner writes its grace entry) remains; the service-auth grace window
+  covers the common concurrent and retry cases, and eliminating the residual
+  would require distributed locking.
+- The post-deploy checklist item (a redeploy must not force a connector
+  re-authorization) still needs its first real confirmation after the
+  seamless-deploy-oauth release deploys.

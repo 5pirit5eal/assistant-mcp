@@ -144,3 +144,70 @@ available; tools decide how to handle the absent identity.
   the stdio transport) and a tool requests the caller's identity
 - **THEN** no identity is returned and the tool call itself is not rejected
   for that reason
+
+### Requirement: Race-tolerant refresh token rotation
+
+When a refresh token has already been consumed by a previous successful refresh,
+the system SHALL, for a configurable grace period after that refresh (default
+60 seconds), respond to a further refresh request presenting the consumed token
+with the same token response the previous refresh issued, instead of rejecting
+it. The replayed response SHALL be identical for all concurrent refreshes
+presenting the same consumed token within the grace period, so parallel client
+sessions converge on one token set. After the grace period has elapsed, the
+system MUST reject a refresh presenting the consumed token with an
+authorization error that forces re-authentication. The grace mapping MUST be
+persisted in the same encrypted OAuth state storage as the token records and
+MUST expire with the grace period; replay beyond the grace period or of tokens
+that were never issued by the service MUST NOT succeed.
+
+#### Scenario: Concurrent refreshes converge on one token set
+
+- **WHEN** two refresh requests presenting the same refresh token arrive while the first one is being processed or shortly after it completed
+- **THEN** both requests succeed and the second one receives the same token response the first one issued, so both client sessions hold the same valid token set
+
+#### Scenario: Late refresh beyond the grace period is rejected
+
+- **WHEN** a refresh request presents a refresh token that was consumed more than the grace period ago
+- **THEN** the request is rejected with an error that forces re-authentication
+
+#### Scenario: Unknown tokens never succeed
+
+- **WHEN** a refresh request presents a token string the service never issued
+- **THEN** the request is rejected with an error that forces re-authentication
+
+#### Scenario: Grace mapping survives a restart within its window
+
+- **WHEN** a refresh token was consumed and the service restarts within the grace period with access to the same OAuth state storage
+- **THEN** a refresh presenting the consumed token still receives the replayed response until the grace period elapses
+
+#### Scenario: Invalid grace period fails fast
+
+- **WHEN** the service starts with a grace period configuration that is not a positive integer number of seconds
+- **THEN** it fails at startup with an error naming the invalid configuration value
+
+### Requirement: Configurable service-issued access-token lifetime
+
+The system SHALL support an optional configuration value for the lifetime of
+the access tokens it issues to clients, decoupled from the upstream identity
+provider's access-token lifetime. When the value is configured, issued access
+tokens MUST carry that lifetime; when it is absent, the service MUST fall back
+to its built-in default (12 hours). The value MUST NOT affect the lifetime of
+upstream identity-provider tokens, which the service refreshes independently.
+The activation contract of the OAuth layer SHALL remain unchanged: the
+lifetime value is optional and neither activates nor deactivates
+authentication.
+
+#### Scenario: Configured lifetime is issued
+
+- **WHEN** the access-token lifetime configuration is set to a valid number of seconds and a client completes a token exchange
+- **THEN** the issued access token expires after the configured number of seconds
+
+#### Scenario: Default lifetime without configuration
+
+- **WHEN** no access-token lifetime configuration is present and a client completes a token exchange
+- **THEN** the issued access token expires after the built-in default lifetime
+
+#### Scenario: Invalid lifetime fails fast
+
+- **WHEN** the service starts with an access-token lifetime configuration that is not a positive integer number of seconds
+- **THEN** it fails at startup with an error naming the invalid configuration value

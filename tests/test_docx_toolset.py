@@ -11,6 +11,7 @@ import subprocess
 import threading
 import zipfile
 from pathlib import Path
+from typing import Any
 
 import pytest
 from docx import Document
@@ -23,6 +24,11 @@ from assistant_mcp.toolsets.docx import (
     mcp,
 )
 from assistant_mcp.toolsets.storage import GCS_BUCKET_ENV, PUBLIC_URL_TEMPLATE
+
+# python-docx ships no type information, so ``Document`` is a function
+# object, not a type, to mypy; this alias keeps the helper annotations
+# meaningful to readers.
+DocxDocument = Any
 
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 MARKDOWN_FORMAT = _SUPPORTED_FORMATS[0]
@@ -71,11 +77,11 @@ def _reference_bytes() -> bytes:
     return resource.read_bytes()
 
 
-def _reference_document() -> Document:
+def _reference_document() -> DocxDocument:
     return Document(io.BytesIO(_reference_bytes()))
 
 
-def _style_element(document: Document, name: str):
+def _style_element(document: DocxDocument, name: str):
     for style in document.styles:
         if style.name == name:
             return style.element
@@ -162,11 +168,11 @@ def _assert_public_url(result) -> None:
     assert all(block.type != "resource" for block in result.content)
 
 
-def _read_docx(result) -> Document:
+def _read_docx(result) -> DocxDocument:
     return Document(io.BytesIO(_docx_bytes(result)))
 
 
-def _paragraph_texts_with_numbering(document: Document) -> list[str]:
+def _paragraph_texts_with_numbering(document: DocxDocument) -> list[str]:
     body = document.element.body
     texts = []
     for paragraph in body.findall(f".//{{{W_NS}}}p"):

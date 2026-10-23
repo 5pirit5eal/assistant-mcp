@@ -29,7 +29,7 @@ jobs:
           python-version: "3.14"
       - run: uv sync --frozen
       - run: uv run ruff check .
-      - run: uv run mypy src
+      - run: uv run mypy src tests
       - run: uv run pytest
 
   docker:
@@ -97,6 +97,16 @@ jobs:
             echo "  gh variable set GCS_BUCKET_NAME --body 'assistant-mcp-documents'" >&2
             exit 1
           fi
+      - name: Check public base URL variable
+        env:
+          MCP_BASE_URL: ${{ vars.MCP_BASE_URL }}
+        run: |
+          if [ -z "$MCP_BASE_URL" ]; then
+            echo "vars.MCP_BASE_URL is not set." >&2
+            echo "Set it to the public Cloud Run URL, e.g.:" >&2
+            echo "  gh variable set MCP_BASE_URL --body 'https://assistant-mcp-k5divdpqfa-ew.a.run.app'" >&2
+            exit 1
+          fi
       - uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
@@ -120,24 +130,13 @@ jobs:
             ${{ env.IMAGE }}:${{ steps.sha.outputs.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Resolve public service URL
-        run: |
-          url="$(gcloud run services describe assistant-mcp \
-            --region europe-west1 \
-            --project rubenschulze-sandbox \
-            --format 'value(status.url)')"
-          if [ -z "$url" ]; then
-            echo "Could not resolve the URL of service assistant-mcp." >&2
-            exit 1
-          fi
-          echo "MCP_BASE_URL=$url" >> "$GITHUB_ENV"
       - uses: google-github-actions/deploy-cloudrun@v3
         with:
           service: assistant-mcp
           region: europe-west1
           project_id: rubenschulze-sandbox
           image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
-          env_vars: MCP_TRANSPORT=http,MCP_BASE_URL=${{ env.MCP_BASE_URL }},MCP_ALLOWED_EMAILS=${{ vars.MCP_ALLOWED_EMAILS }},MCP_STATELESS_HTTP=true,GCS_BUCKET_NAME=${{ vars.GCS_BUCKET_NAME }}
+          env_vars: MCP_TRANSPORT=http,MCP_BASE_URL=${{ vars.MCP_BASE_URL }},MCP_ALLOWED_EMAILS=${{ vars.MCP_ALLOWED_EMAILS }},MCP_STATELESS_HTTP=true,GCS_BUCKET_NAME=${{ vars.GCS_BUCKET_NAME }}
           flags: >-
             --allow-unauthenticated
             --service-account=assistant-mcp-runtime@rubenschulze-sandbox.iam.gserviceaccount.com

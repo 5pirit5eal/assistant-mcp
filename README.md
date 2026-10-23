@@ -61,7 +61,7 @@ uv sync
 uv run assistant-mcp           # stdio-Transport (z. B. für lokale MCP-Clients)
 uv run pytest                  # Tests
 uv run ruff check .            # Lint
-uv run mypy src                # Typ-Check
+uv run mypy src tests           # Typ-Check (wie CI)
 ```
 
 ## CI
@@ -159,11 +159,19 @@ GitHub-Release (`on: release: types: [released]`) und per manueller Auslösung
    `europe-west1-docker.pkg.dev/rubenschulze-sandbox/assistant-mcp/server`.
 4. Deploy des digest-gepinnten Images auf den Service `assistant-mcp` (Region
    `europe-west1`, `MCP_TRANSPORT=http`, unauthentifizierter Zugriff erlaubt)
-   — inklusive OAuth-Konfiguration: `MCP_BASE_URL` (Service-URL) und
-   `MCP_ALLOWED_EMAILS` als plain Env-Vars, `GOOGLE_CLIENT_ID`,
+   — inklusive OAuth-Konfiguration: `MCP_BASE_URL` und `MCP_ALLOWED_EMAILS`
+   als plain Env-Vars, `GOOGLE_CLIENT_ID`,
    `GOOGLE_CLIENT_SECRET` und `MCP_OAUTH_STORAGE_KEY` per `--set-secrets` aus
    Secret Manager (siehe „Authentifizierung“); dazu `MCP_STATELESS_HTTP=true` und
    einen Startup-Probe auf `/healthz` (siehe „Startup-Probe und stateless HTTP“).
+
+Die öffentliche Base-URL (`MCP_BASE_URL`) wird nicht mehr pro Deploy per
+`gcloud run services describe` aufgelöst, sondern kommt aus der
+GitHub-Repository-Variable `vars.MCP_BASE_URL` und wird vor dem Deploy
+geprüft (Fail-fast mit Hinweis auf das `gh variable set`-Kommando, gleiches
+Muster wie `MCP_ALLOWED_EMAILS`): `gcloud` liefert je nach SDK-Version zwei
+URL-Formate, und jede Änderung des Issuers invalidiert alle ausgestellten
+Tokens. Der gepinnte Wert bleibt so über alle Deploys identisch.
 
 ### Startup-Probe und stateless HTTP
 
@@ -216,9 +224,17 @@ fehlenden Variablen.
 | --- | --- | --- |
 | `GOOGLE_CLIENT_ID` | Google-OAuth-Client-ID | Secret Manager (`google-client-id`) |
 | `GOOGLE_CLIENT_SECRET` | Google-OAuth-Client-Secret | Secret Manager (`google-client-secret`) |
-| `MCP_BASE_URL` | Öffentliche Service-URL, absolut mit `https://` | Plain Env Var (löst der Workflow per `gcloud run services describe` auf) |
+| `MCP_BASE_URL` | Öffentliche Service-URL, absolut mit `https://` | Plain Env Var (GitHub-Variable `MCP_BASE_URL`) |
 | `MCP_ALLOWED_EMAILS` | Komma-separierte Allowlist, Match Case-insensitive | Plain Env Var (GitHub-Variable `MCP_ALLOWED_EMAILS`) |
 | `MCP_OAUTH_STORAGE_KEY` | Fernet-Key zur Verschlüsselung des OAuth-State | Secret Manager (`mcp-oauth-storage-key`) |
+| `MCP_REFRESH_GRACE_SECONDS` | *Optional:* Idempotenz-Fenster für gerade rotierte Refresh-Tokens (Default `60`) | Nicht injiziert — Code-Default greift |
+| `MCP_ACCESS_TOKEN_TTL_SECONDS` | *Optional:* Lebensdauer der service-ausgestellten Access-Tokens, unabhängig von Googles 1 h (Default `43200` = 12 h) | Nicht injiziert — Code-Default greift |
+
+`MCP_REFRESH_GRACE_SECONDS` und `MCP_ACCESS_TOKEN_TTL_SECONDS` sind
+optionale Tuning-Parameter: Der Deploy setzt sie nicht (die Code-Defaults
+greifen), sie sind weder erforderlich noch aktivierend für den OAuth-Layer —
+der Aktivierungs-Kontrakt bleibt bei den fünf Werten. Ad hoc anpassbar per
+`gcloud run services update --set-env-vars`.
 
 ### Einmalige Google-Cloud-Einrichtung
 
@@ -283,7 +299,17 @@ fehlenden Variablen.
      --body "you@example.com,other@example.com"
    ```
 
-7. **Öffentlichen Dokumenten-Bucket** anlegen (`europe-west1`, Uniform Access,
+7. **Base-URL als GitHub-Repository-Variable** hinterlegen (der Workflow liest
+   sie als `vars.MCP_BASE_URL`, prüft sie per Fail-fast und injiziert sie als
+   `MCP_BASE_URL` — statt sie pro Deploy per `gcloud` aufzulösen):
+
+   ```bash
+   gh variable set MCP_BASE_URL \
+     --repo 5pirit5eal/assistant-mcp \
+     --body "https://assistant-mcp-k5divdpqfa-ew.a.run.app"
+   ```
+
+8. **Öffentlichen Dokumenten-Bucket** anlegen (`europe-west1`, Uniform Access,
    öffentliches Lesen, Lifecycle-Regel löscht Objekte nach 30 Tagen) und dem
    Runtime-Service-Account Schreibrechte geben:
 
@@ -339,7 +365,8 @@ Nur Google-Accounts von `MCP_ALLOWED_EMAILS` erhalten ein brauchbares Token.
       `curl -i https://<service-url>/mcp` → `401`.
 - [ ] Der Login überlebt einen Neustart: neuen Deploy anstoßen (z. B. Workflow
       manuell auf `main` auslösen) — der Client muss danach ohne erneuten Login
-      weiterarbeiten, weil der OAuth-State aus Firestore kommt.
+      weiterarbeiten, weil Base-URL und Token-State über Deploys stabil bleiben
+      (gepinnte `MCP_BASE_URL`, OAuth-State aus Firestore).
 
 ### Schlüssel-Rotation (`MCP_OAUTH_STORAGE_KEY`)
 
