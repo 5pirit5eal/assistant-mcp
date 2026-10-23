@@ -55,6 +55,8 @@ werden nie geladen; als Data-URI eingebettete Ressourcen sind erlaubt. Mit
 ## Lokale Entwicklung
 
 Benötigt Python 3.14 (`requires-python >= 3.14`, per `.python-version` gepinnt).
+Für die Server-Tests ist außerdem lokal `pango` nötig (macOS: `brew install pango`);
+das CI-Image bringt es mit.
 
 ```bash
 uv sync
