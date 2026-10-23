@@ -166,16 +166,18 @@ def _render_html_to_pdf(html: str) -> bytes:
         raise ToolError(f"HTML rendering failed: {exc}") from exc
 
 
-_SUPERSCRIPT_RE = re.compile(r"\^(\{([^{}]+)\}|[A-Za-z0-9]+)")
+_SUPERSCRIPT_RE = re.compile(r"\^(\{([^{}]+)\}|[+-]?[A-Za-z0-9]+)")
 
 
 def _render_text(text: str) -> str:
     """Escape plain text and turn ``^`` markers into superscript markup.
 
     ``x^2`` superscripts the following run of ASCII alphanumerics,
-    ``x^{n+1}`` the braced group. A caret followed by anything else -
-    empty, nested, or unclosed braces, non-ASCII characters,
-    punctuation - stays a literal caret.
+    optionally signed directly after the caret (``x^-3``, ``x^+5y``);
+    ``x^{n+1}`` superscripts the braced group. A caret followed by
+    anything else - a sign without a following run, empty, nested, or
+    unclosed braces, non-ASCII characters, punctuation - stays a
+    literal caret.
     """
     parts: list[str] = []
     pos = 0
@@ -212,8 +214,14 @@ def _render_inline(tokens) -> str:
                 parts.append("</u></link>")
             case "softbreak":
                 parts.append(" ")
+            case "hardbreak":
+                parts.append("<br/>")
             case "image":
-                pass
+                raise ToolError(
+                    "images are not supported in the Markdown renderer; "
+                    "use the HTML route with a data-URI image, or remove "
+                    "the image token"
+                )
             case _:
                 parts.append(_escape(tok.content) if tok.content else "")
     return "".join(parts)
@@ -349,16 +357,24 @@ async def generate_pdf(
     public resource URL.
 
     Markdown supports headings, paragraphs, bullet and ordered lists,
-    tables, code blocks, links, bold and italic. Math superscripts: a
-    caret renders the following run of ASCII letters and digits as
-    raised, smaller glyphs (``x^2``), and a braced group as a
-    multi-character superscript (``x^{n+1}``); a caret followed by
-    anything else (punctuation, non-ASCII, empty braces) stays
-    literal (use code spans for literal carets in front of digits).
+    tables, code blocks, links, bold and italic. CommonMark hard line
+    breaks (a line ending in a backslash or in two or more spaces)
+    render as real line breaks; wrapped continuation lines join into
+    one. For custom item labels such as ``a)``, ``b)``, ``c)`` on
+    worksheets, write the items as separate paragraphs and use hard
+    breaks for multi-line items instead of bullet lists. Math
+    superscripts: a caret renders the following run of ASCII letters
+    and digits, optionally signed directly after the caret
+    (``x^2``, ``x^-3``), as raised, smaller glyphs, and a braced group
+    as a multi-character superscript (``x^{n+1}``); a caret followed
+    by anything else (a lone sign, punctuation, non-ASCII, empty
+    braces) stays literal (use code spans for literal carets in front
+    of digits).
     German umlauts and quotes render correctly; characters outside
     the built-in Latin fonts (e.g. CJK) render as replacement glyphs.
-    Image tokens in the Markdown input are not supported and are
-    silently skipped (no error, no output).
+    Image tokens in the Markdown input are not supported and make the
+    call fail with an error (use the HTML route with a data-URI
+    image instead).
 
     HTML input (fragments or full documents) is rendered with
     print-CSS fidelity: embedded ``<style>`` rules, inline styles, and

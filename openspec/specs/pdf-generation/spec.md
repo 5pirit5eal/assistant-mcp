@@ -27,13 +27,38 @@ The `generate_pdf` tool of the `pdf` toolset MUST generate a valid PDF document 
 
 #### Scenario: Caret superscripts render raised
 
-- **WHEN** `generate_pdf` is called with text containing caret markers as used in math notation (`x^2`, `x^{n+1}`)
+- **WHEN** `generate_pdf` is called with text containing caret markers as used in math notation (`x^2`, `x^{-3}`, `x^{n+1}`)
 - **THEN** the caret and any bracing do not appear in the output and the marked content renders as superscript (raised and in smaller glyphs than the surrounding body text)
+
+#### Scenario: Signed caret superscripts
+
+- **WHEN** `generate_pdf` is called with text where a caret is immediately followed by a sign and then ASCII letters/digits (`x^-3`, `x^+5y`)
+- **THEN** the sign and the run render as superscript (raised and in smaller glyphs), without the caret appearing in the output
+
+#### Scenario: Signs mid-expression stay literal
+
+- **WHEN** `generate_pdf` is called with text where a sign follows a superscript run instead of the caret (`x^2-3`, `x^4+5`)
+- **THEN** only the caret-adjacent run renders as superscript and the sign plus following content render as literal text (the expression reads as `x²-3`, not `x^(2-3)`)
 
 #### Scenario: Non-superscript carets stay literal
 
-- **WHEN** `generate_pdf` is called with text where a caret is followed by anything other than ASCII letters/digits or a braced group (punctuation, empty braces, nested or unclosed braces, non-ASCII characters), or where the caret appears inside a code span or code block
+- **WHEN** `generate_pdf` is called with text where a caret is followed by anything other than an optional leading sign with ASCII letters/digits or a braced group (punctuation, empty braces, nested or unclosed braces, non-ASCII characters, a lone sign), or where the caret appears inside a code span or code block
 - **THEN** the caret and the following content render as literal text without superscript formatting
+
+#### Scenario: Hard line breaks are preserved
+
+- **WHEN** `generate_pdf` is called with Markdown containing a hard line break (a line ending in two or more spaces, or in a backslash) within a paragraph or list item
+- **THEN** the rendered PDF starts a new line at the break position instead of joining the two source lines into one rendered line
+
+#### Scenario: Soft line breaks keep collapsing
+
+- **WHEN** `generate_pdf` is called with Markdown containing a wrapped or lazily indented continuation line inside a paragraph or list item without hard-break markers
+- **THEN** the two source lines render as one continuous line separated by a space, as before
+
+#### Scenario: Image tokens fail loudly
+
+- **WHEN** `generate_pdf` is called with Markdown containing an image token
+- **THEN** the tool returns a meaningful error explaining that images are not supported in the Markdown route, instead of silently skipping the token and producing a PDF
 
 #### Scenario: Empty input
 

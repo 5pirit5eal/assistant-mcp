@@ -194,13 +194,7 @@ async def test_generate_pdf_superscript_renders_raised():
     assert "a2 + b2 = c2" in text
     assert "^" not in text
 
-    runs: list[tuple[str, float]] = []
-
-    def visitor(chunk, cm, tm, font_dict, font_size):
-        if chunk.strip():
-            runs.append((chunk, font_size))
-
-    _read_pdf(result).pages[0].extract_text(visitor_text=visitor)
+    runs = _chunk_sizes(result)
     body_sizes = [size for chunk, size in runs if "Pythagoras" in chunk]
     sup_sizes = [size for chunk, size in runs if chunk == "2"]
     assert body_sizes and sup_sizes
@@ -247,6 +241,109 @@ async def test_generate_pdf_superscript_escaped_markup_is_neutralized():
     result = await call_generate_pdf(md)
     text = _pdf_text(result)
     assert "x^{<b>2</b>}" in text
+
+
+def _chunk_sizes(result) -> list[tuple[str, float]]:
+    """Font sizes of non-empty text chunks on the first PDF page."""
+    runs: list[tuple[str, float]] = []
+
+    def visitor(chunk, cm, tm, font_dict, font_size):
+        if chunk.strip():
+            runs.append((chunk, font_size))
+
+    _read_pdf(result).pages[0].extract_text(visitor_text=visitor)
+    return runs
+
+
+async def test_generate_pdf_hard_break_backslash_renders_two_lines():
+    md = "Zeile A\\\nZeile B\n"
+    result = await call_generate_pdf(md)
+    text = _pdf_text(result)
+    assert "Zeile A\nZeile B" in text
+    assert "Zeile A Zeile B" not in text
+
+
+async def test_generate_pdf_hard_break_trailing_spaces_in_list_item():
+    md = "- a) Aufgabe  \nLoesung hier\n"
+    result = await call_generate_pdf(md)
+    text = _pdf_text(result)
+    assert "Aufgabe\nLoesung" in text
+    assert "Aufgabe Loesung" not in text
+
+
+async def test_generate_pdf_soft_break_still_joins_lines():
+    md = "Erste Zeile\nzweite Zeile\n"
+    result = await call_generate_pdf(md)
+    text = _pdf_text(result)
+    assert "Erste Zeile zweite Zeile" in text
+    assert "Erste Zeile\nzweite Zeile" not in text
+
+
+async def test_generate_pdf_superscript_signed_runs():
+    md = "Klein: x^-3 und x^+5y Ende.\n"
+    result = await call_generate_pdf(md)
+    text = _pdf_text(result)
+    assert "^" not in text
+    assert "-3" in text
+    assert "+5y" in text
+
+    runs = _chunk_sizes(result)
+    body_sizes = [size for chunk, size in runs if "Klein" in chunk]
+    signed_sizes = [size for chunk, size in runs if chunk in ("-3", "+5y")]
+    assert body_sizes and signed_sizes
+    assert all(size < body for size in signed_sizes for body in body_sizes), runs
+
+
+async def test_generate_pdf_superscript_sign_after_run_stays_literal():
+    md = "Term: x^2-3 und x^4+5 Ende.\n"
+    result = await call_generate_pdf(md)
+    text = _pdf_text(result)
+    assert "^" not in text
+    assert "x2-3" in text
+    assert "x4+5" in text
+
+    runs = _chunk_sizes(result)
+    body_sizes = [size for chunk, size in runs if "Term" in chunk]
+    sup_sizes = [size for chunk, size in runs if chunk == "2"]
+    assert body_sizes and sup_sizes
+    assert all(size < body for size in sup_sizes for body in body_sizes), runs
+    minus_sizes = [size for chunk, size in runs if "-3" in chunk]
+    assert minus_sizes, runs
+    assert all(size in body_sizes for size in minus_sizes), runs
+
+
+async def test_generate_pdf_superscript_lone_sign_stays_literal():
+    md = "Ohne Exponent: x^- und x^+ Ende.\n"
+    result = await call_generate_pdf(md)
+    text = _pdf_text(result)
+    assert "x^-" in text
+    assert "x^+" in text
+
+
+async def test_generate_pdf_soft_break_in_list_item_still_joins():
+    md = "- a) Aufgabe\nLoesung hier\n"
+    result = await call_generate_pdf(md)
+    text = _pdf_text(result)
+    assert "Aufgabe Loesung" in text
+    assert "Aufgabe\nLoesung" not in text
+
+
+async def test_generate_pdf_markdown_image_token_returns_error():
+    md = "Text vor dem Bild\n\n![Diagramm](diagramm.png)\n\nText danach.\n"
+    result = await call_generate_pdf_error(md)
+    assert result.is_error
+    message = result.content[0].text
+    assert "image" in message.lower()
+    assert "markdown" in message.lower()
+    assert "html" in message.lower()
+    assert "data-uri" in message.lower()
+
+
+async def test_generate_pdf_markdown_image_token_in_list_item_returns_error():
+    md = "- Punkt mit ![Diagramm](diagramm.png)\n"
+    result = await call_generate_pdf_error(md)
+    assert result.is_error
+    assert "image" in result.content[0].text.lower()
 
 
 async def test_generate_pdf_markdown_multipage():

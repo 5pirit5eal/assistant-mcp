@@ -77,3 +77,13 @@ written in English.
 - The post-deploy checklist item (a redeploy must not force a connector
   re-authorization) still needs its first real confirmation after the
   seamless-deploy-oauth release deploys.
+
+## Deliberately rejected (Markdown renderer)
+
+- A TeX/math typesetting input format, vertical-spacing or
+  page-geometry controls in the Markdown route, a custom list-label
+  syntax (write `a)`, `b)`, `c)` items as paragraphs plus hard breaks),
+  and file-path input for `generate_pdf` (stays content-based and
+  stateless) were evaluated and deliberately rejected in the
+  improve-markdown-renderer-fidelity change; data-URI images in the
+  Markdown route remain a possible follow-up.
