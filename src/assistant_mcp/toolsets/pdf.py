@@ -1,5 +1,6 @@
 """PDF toolset: generate PDFs from text/Markdown and convert Office files."""
 
+import asyncio
 import base64
 import binascii
 import io
@@ -80,6 +81,8 @@ _TABLE_STYLE = TableStyle(
 )
 _SUPPORTED_FORMATS = ("docx", "xlsx", "pptx")
 _FORMATS_DESC = ", ".join(f'"{item}"' for item in _SUPPORTED_FORMATS)
+_SUBPROCESS_TIMEOUT_SECONDS = 120
+_STDERR_DETAIL_LIMIT = 2000
 
 _GENERATE_FORMATS = ("auto", "markdown", "html")
 _GENERATE_FORMATS_DESC = ", ".join(f'"{item}"' for item in _GENERATE_FORMATS)
@@ -166,16 +169,69 @@ def _render_html_to_pdf(html: str) -> bytes:
         raise ToolError(f"HTML rendering failed: {exc}") from exc
 
 
-_SUPERSCRIPT_RE = re.compile(r"\^(\{([^{}]+)\}|[A-Za-z0-9]+)")
+def _render_markdown_to_pdf(markdown: str) -> bytes:
+    """Render Markdown to PDF bytes via the ReportLab pipeline."""
+    return _build_pdf(_markdown_to_story(markdown))
+
+
+def _convert_office_to_pdf_bytes(content: str, fmt: str) -> bytes:
+    """Decode a base64 Office file and convert it to PDF via LibreOffice."""
+    try:
+        data = base64.b64decode(content, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ToolError(f"invalid base64 input: {exc}") from exc
+    if not data:
+        raise ToolError("decoded file content is empty")
+
+    if not zipfile.is_zipfile(io.BytesIO(data)):
+        raise ToolError(f"invalid {fmt} file: not a valid OOXML container")
+
+    if shutil.which("soffice") is None:
+        raise ToolError("LibreOffice (soffice) is not available on the server")
+
+    with tempfile.TemporaryDirectory(prefix="convert_to_pdf_") as tmpdir:
+        source = Path(tmpdir) / f"input.{fmt}"
+        source.write_bytes(data)
+        profile = Path(tmpdir) / "lo-profile"
+        profile.mkdir()
+        result_file = Path(tmpdir) / "input.pdf"
+        cmd = [
+            "soffice",
+            "--headless",
+            f"-env:UserInstallation=file://{profile}",
+            "--convert-to",
+            "pdf",
+            "--outdir",
+            tmpdir,
+            str(source),
+        ]
+        try:
+            process = subprocess.run(
+                cmd,
+                capture_output=True,
+                timeout=_SUBPROCESS_TIMEOUT_SECONDS,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise ToolError(f"conversion timed out for {fmt}") from exc
+        if process.returncode != 0 or not result_file.exists():
+            detail = process.stderr.decode(errors="replace").strip()[-_STDERR_DETAIL_LIMIT:]
+            raise ToolError(f"conversion failed for {fmt}: {detail or 'unknown error'}")
+        return result_file.read_bytes()
+
+
+_SUPERSCRIPT_RE = re.compile(r"\^(\{([^{}]+)\}|[+-]?[A-Za-z0-9]+)")
 
 
 def _render_text(text: str) -> str:
     """Escape plain text and turn ``^`` markers into superscript markup.
 
     ``x^2`` superscripts the following run of ASCII alphanumerics,
-    ``x^{n+1}`` the braced group. A caret followed by anything else -
-    empty, nested, or unclosed braces, non-ASCII characters,
-    punctuation - stays a literal caret.
+    optionally signed directly after the caret (``x^-3``, ``x^+5y``);
+    ``x^{n+1}`` superscripts the braced group. A caret followed by
+    anything else - a sign without a following run, empty, nested, or
+    unclosed braces, non-ASCII characters, punctuation - stays a
+    literal caret.
     """
     parts: list[str] = []
     pos = 0
@@ -212,8 +268,14 @@ def _render_inline(tokens) -> str:
                 parts.append("</u></link>")
             case "softbreak":
                 parts.append(" ")
+            case "hardbreak":
+                parts.append("<br/>")
             case "image":
-                pass
+                raise ToolError(
+                    "images are not supported in the Markdown renderer; "
+                    "use the HTML route with a data-URI image, or remove "
+                    "the image token"
+                )
             case _:
                 parts.append(_escape(tok.content) if tok.content else "")
     return "".join(parts)
@@ -349,16 +411,24 @@ async def generate_pdf(
     public resource URL.
 
     Markdown supports headings, paragraphs, bullet and ordered lists,
-    tables, code blocks, links, bold and italic. Math superscripts: a
-    caret renders the following run of ASCII letters and digits as
-    raised, smaller glyphs (``x^2``), and a braced group as a
-    multi-character superscript (``x^{n+1}``); a caret followed by
-    anything else (punctuation, non-ASCII, empty braces) stays
-    literal (use code spans for literal carets in front of digits).
+    tables, code blocks, links, bold and italic. CommonMark hard line
+    breaks (a line ending in a backslash or in two or more spaces)
+    render as real line breaks; wrapped continuation lines join into
+    one. For custom item labels such as ``a)``, ``b)``, ``c)`` on
+    worksheets, write the items as separate paragraphs and use hard
+    breaks for multi-line items instead of bullet lists. Math
+    superscripts: a caret renders the following run of ASCII letters
+    and digits, optionally signed directly after the caret
+    (``x^2``, ``x^-3``), as raised, smaller glyphs, and a braced group
+    as a multi-character superscript (``x^{n+1}``); a caret followed
+    by anything else (a lone sign, punctuation, non-ASCII, empty
+    braces) stays literal (use code spans for literal carets in front
+    of digits).
     German umlauts and quotes render correctly; characters outside
     the built-in Latin fonts (e.g. CJK) render as replacement glyphs.
-    Image tokens in the Markdown input are not supported and are
-    silently skipped (no error, no output).
+    Image tokens in the Markdown input are not supported and make the
+    call fail with an error (use the HTML route with a data-URI
+    image instead).
 
     HTML input (fragments or full documents) is rendered with
     print-CSS fidelity: embedded ``<style>`` rules, inline styles, and
@@ -384,9 +454,9 @@ async def generate_pdf(
         raise ToolError(f"unsupported format: {format}. Use one of: {supported}")
     effective = fmt if fmt != "auto" else _detect_input_format(text)
     if effective == "html":
-        data = _render_html_to_pdf(text)
+        data = await asyncio.to_thread(_render_html_to_pdf, text)
     else:
-        data = _build_pdf(_markdown_to_story(text))
+        data = await asyncio.to_thread(_render_markdown_to_pdf, text)
     object_name = f"pdf/{uuid.uuid4()}.pdf"
     return GenerationResult(
         url=await upload_document(data, object_name, _PDF_CONTENT_TYPE)
@@ -424,45 +494,8 @@ async def convert_to_pdf(
     if fmt not in _SUPPORTED_FORMATS:
         supported = ", ".join(_SUPPORTED_FORMATS)
         raise ToolError(f"unsupported format: {format}. Use one of: {supported}")
-    try:
-        data = base64.b64decode(content, validate=True)
-    except (binascii.Error, ValueError) as exc:
-        raise ToolError(f"invalid base64 input: {exc}") from exc
-    if not data:
-        raise ToolError("decoded file content is empty")
-
-    if not zipfile.is_zipfile(io.BytesIO(data)):
-        raise ToolError(f"invalid {fmt} file: not a valid OOXML container")
-
-    if shutil.which("soffice") is None:
-        raise ToolError("LibreOffice (soffice) is not available on the server")
-
-    with tempfile.TemporaryDirectory(prefix="convert_to_pdf_") as tmpdir:
-        source = Path(tmpdir) / f"input.{fmt}"
-        source.write_bytes(data)
-        profile = Path(tmpdir) / "lo-profile"
-        profile.mkdir()
-        result_file = Path(tmpdir) / "input.pdf"
-        cmd = [
-            "soffice",
-            "--headless",
-            f"-env:UserInstallation=file://{profile}",
-            "--convert-to",
-            "pdf",
-            "--outdir",
-            tmpdir,
-            str(source),
-        ]
-        try:
-            process = subprocess.run(cmd, capture_output=True, timeout=120, check=False)
-        except subprocess.TimeoutExpired as exc:
-            raise ToolError(f"conversion timed out for {fmt}") from exc
-        if process.returncode != 0 or not result_file.exists():
-            detail = process.stderr.decode(errors="replace").strip()
-            raise ToolError(f"conversion failed for {fmt}: {detail or 'unknown error'}")
-        object_name = f"pdf/{uuid.uuid4()}.pdf"
-        return GenerationResult(
-            url=await upload_document(
-                result_file.read_bytes(), object_name, _PDF_CONTENT_TYPE
-            )
-        )
+    pdf_bytes = await asyncio.to_thread(_convert_office_to_pdf_bytes, content, fmt)
+    object_name = f"pdf/{uuid.uuid4()}.pdf"
+    return GenerationResult(
+        url=await upload_document(pdf_bytes, object_name, _PDF_CONTENT_TYPE)
+    )

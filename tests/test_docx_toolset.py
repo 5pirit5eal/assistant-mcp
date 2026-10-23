@@ -1,5 +1,6 @@
 """Tests for the docx toolset theme asset and converter behavior."""
 
+import asyncio
 import base64
 import functools
 import http.server
@@ -9,6 +10,7 @@ import os
 import shutil
 import subprocess
 import threading
+import time
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -539,3 +541,37 @@ async def test_conversion_timeout_returns_error(monkeypatch):
     monkeypatch.setattr("assistant_mcp.toolsets.docx.subprocess.run", timing_out_run)
     result = await _call_convert_error(MARKDOWN_COMMON_ELEMENTS, MARKDOWN_FORMAT)
     assert "timed out" in _error_text(result)
+
+
+# --- Event-Loop-Responsiveness ----------------------------------------------
+
+
+async def _loop_drift(ticks: int = 40, interval: float = 0.01) -> float:
+    """Extra time (s) a ticks x interval await loop needs on the running loop.
+
+    A blocking call running on the event loop stalls every await, so the
+    drift grows by the remaining block duration; work offloaded to a
+    thread leaves only scheduling noise.
+    """
+    start = time.perf_counter()
+    for _ in range(ticks):
+        await asyncio.sleep(interval)
+    return time.perf_counter() - start - ticks * interval
+
+
+async def test_convert_to_docx_does_not_block_event_loop(monkeypatch):
+    def slow_convert(content: str, fmt: str, title: str | None) -> bytes:
+        time.sleep(0.5)
+        return b"PK-fake"
+
+    monkeypatch.setattr(
+        "assistant_mcp.toolsets.docx._convert_markdown_to_docx_bytes", slow_convert
+    )
+    task = asyncio.get_running_loop().create_task(
+        _call_convert("# Langsam", MARKDOWN_FORMAT)
+    )
+    drift = await _loop_drift()
+    assert drift < 0.25, drift
+    assert not task.done(), "ticker must finish while the slow call is still pending"
+    result = await task
+    assert not result.is_error, result.content[0].text
