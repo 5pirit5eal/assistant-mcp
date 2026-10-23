@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM curlimages/curl:8.16.0 AS pandoc-fetch
+FROM curlimages/curl:8.22.0 AS pandoc-fetch
 # Pinned official pandoc release binary (>= 3.2 required for conventional
 # Word list styles; Debian trixie apt only ships 3.1.11.1). The sha256 of
 # the downloaded .deb is verified per target architecture.
