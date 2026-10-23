@@ -1,5 +1,6 @@
 """DOCX toolset: convert Markdown or HTML content to a styled Word document."""
 
+import asyncio
 import shutil
 import subprocess
 import tempfile
@@ -33,6 +34,41 @@ class GenerationResult(BaseModel):
         "storage bucket. Bucket objects are deleted one month after creation.",
         examples=["https://storage.googleapis.com/bucket/docx/object.docx"],
     )
+
+
+def _convert_markdown_to_docx_bytes(content: str, fmt: str, title: str | None) -> bytes:
+    """Convert Markdown or HTML content to styled DOCX bytes via pandoc."""
+    if shutil.which(_PANDOC_BINARY) is None:
+        raise ToolError(f"{_PANDOC_BINARY} is not available on the server")
+    reference_doc = Path(__file__).parent / _REFERENCE_DOCX_NAME
+    with tempfile.TemporaryDirectory(prefix="convert_to_docx_") as tmpdir:
+        output = Path(tmpdir) / _OUTPUT_FILENAME
+        cmd = [
+            _PANDOC_BINARY,
+            "-f",
+            fmt,
+            "-t",
+            "docx",
+            f"--reference-doc={reference_doc}",
+            "-o",
+            str(output),
+        ]
+        if title is not None:
+            cmd.extend(["--metadata", f"title={title}"])
+        try:
+            process = subprocess.run(
+                cmd,
+                input=content.encode(),
+                capture_output=True,
+                timeout=_SUBPROCESS_TIMEOUT_SECONDS,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise ToolError("docx conversion timed out") from exc
+        detail = process.stderr.decode(errors="replace").strip()[-_STDERR_DETAIL_LIMIT:]
+        if process.returncode != 0 or not output.exists():
+            raise ToolError(f"docx conversion failed: {detail or 'unknown error'}")
+        return output.read_bytes()
 
 
 @mcp.tool
@@ -79,40 +115,11 @@ async def convert_to_docx(
     fmt = format.lower().strip()
     if fmt not in _SUPPORTED_FORMATS:
         raise ToolError(f"unsupported format: {format}. Use one of: {_FORMATS_DESC}")
-    if shutil.which(_PANDOC_BINARY) is None:
-        raise ToolError(f"{_PANDOC_BINARY} is not available on the server")
 
-    reference_doc = Path(__file__).parent / _REFERENCE_DOCX_NAME
-    with tempfile.TemporaryDirectory(prefix="convert_to_docx_") as tmpdir:
-        output = Path(tmpdir) / _OUTPUT_FILENAME
-        cmd = [
-            _PANDOC_BINARY,
-            "-f",
-            fmt,
-            "-t",
-            "docx",
-            f"--reference-doc={reference_doc}",
-            "-o",
-            str(output),
-        ]
-        if title is not None:
-            cmd.extend(["--metadata", f"title={title}"])
-        try:
-            process = subprocess.run(
-                cmd,
-                input=content.encode(),
-                capture_output=True,
-                timeout=_SUBPROCESS_TIMEOUT_SECONDS,
-                check=False,
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise ToolError("docx conversion timed out") from exc
-        detail = process.stderr.decode(errors="replace").strip()[-_STDERR_DETAIL_LIMIT:]
-        if process.returncode != 0 or not output.exists():
-            raise ToolError(f"docx conversion failed: {detail or 'unknown error'}")
-        object_name = f"docx/{uuid.uuid4()}.docx"
-        return GenerationResult(
-            url=await upload_document(
-                output.read_bytes(), object_name, _DOCX_CONTENT_TYPE
-            )
-        )
+    docx_bytes = await asyncio.to_thread(
+        _convert_markdown_to_docx_bytes, content, fmt, title
+    )
+    object_name = f"docx/{uuid.uuid4()}.docx"
+    return GenerationResult(
+        url=await upload_document(docx_bytes, object_name, _DOCX_CONTENT_TYPE)
+    )

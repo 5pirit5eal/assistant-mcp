@@ -1,5 +1,6 @@
 """PDF toolset: generate PDFs from text/Markdown and convert Office files."""
 
+import asyncio
 import base64
 import binascii
 import io
@@ -80,6 +81,8 @@ _TABLE_STYLE = TableStyle(
 )
 _SUPPORTED_FORMATS = ("docx", "xlsx", "pptx")
 _FORMATS_DESC = ", ".join(f'"{item}"' for item in _SUPPORTED_FORMATS)
+_SUBPROCESS_TIMEOUT_SECONDS = 120
+_STDERR_DETAIL_LIMIT = 2000
 
 _GENERATE_FORMATS = ("auto", "markdown", "html")
 _GENERATE_FORMATS_DESC = ", ".join(f'"{item}"' for item in _GENERATE_FORMATS)
@@ -164,6 +167,57 @@ def _render_html_to_pdf(html: str) -> bytes:
         ).write_pdf()
     except Exception as exc:
         raise ToolError(f"HTML rendering failed: {exc}") from exc
+
+
+def _render_markdown_to_pdf(markdown: str) -> bytes:
+    """Render Markdown to PDF bytes via the ReportLab pipeline."""
+    return _build_pdf(_markdown_to_story(markdown))
+
+
+def _convert_office_to_pdf_bytes(content: str, fmt: str) -> bytes:
+    """Decode a base64 Office file and convert it to PDF via LibreOffice."""
+    try:
+        data = base64.b64decode(content, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ToolError(f"invalid base64 input: {exc}") from exc
+    if not data:
+        raise ToolError("decoded file content is empty")
+
+    if not zipfile.is_zipfile(io.BytesIO(data)):
+        raise ToolError(f"invalid {fmt} file: not a valid OOXML container")
+
+    if shutil.which("soffice") is None:
+        raise ToolError("LibreOffice (soffice) is not available on the server")
+
+    with tempfile.TemporaryDirectory(prefix="convert_to_pdf_") as tmpdir:
+        source = Path(tmpdir) / f"input.{fmt}"
+        source.write_bytes(data)
+        profile = Path(tmpdir) / "lo-profile"
+        profile.mkdir()
+        result_file = Path(tmpdir) / "input.pdf"
+        cmd = [
+            "soffice",
+            "--headless",
+            f"-env:UserInstallation=file://{profile}",
+            "--convert-to",
+            "pdf",
+            "--outdir",
+            tmpdir,
+            str(source),
+        ]
+        try:
+            process = subprocess.run(
+                cmd,
+                capture_output=True,
+                timeout=_SUBPROCESS_TIMEOUT_SECONDS,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise ToolError(f"conversion timed out for {fmt}") from exc
+        if process.returncode != 0 or not result_file.exists():
+            detail = process.stderr.decode(errors="replace").strip()[-_STDERR_DETAIL_LIMIT:]
+            raise ToolError(f"conversion failed for {fmt}: {detail or 'unknown error'}")
+        return result_file.read_bytes()
 
 
 _SUPERSCRIPT_RE = re.compile(r"\^(\{([^{}]+)\}|[+-]?[A-Za-z0-9]+)")
@@ -400,9 +454,9 @@ async def generate_pdf(
         raise ToolError(f"unsupported format: {format}. Use one of: {supported}")
     effective = fmt if fmt != "auto" else _detect_input_format(text)
     if effective == "html":
-        data = _render_html_to_pdf(text)
+        data = await asyncio.to_thread(_render_html_to_pdf, text)
     else:
-        data = _build_pdf(_markdown_to_story(text))
+        data = await asyncio.to_thread(_render_markdown_to_pdf, text)
     object_name = f"pdf/{uuid.uuid4()}.pdf"
     return GenerationResult(
         url=await upload_document(data, object_name, _PDF_CONTENT_TYPE)
@@ -440,45 +494,8 @@ async def convert_to_pdf(
     if fmt not in _SUPPORTED_FORMATS:
         supported = ", ".join(_SUPPORTED_FORMATS)
         raise ToolError(f"unsupported format: {format}. Use one of: {supported}")
-    try:
-        data = base64.b64decode(content, validate=True)
-    except (binascii.Error, ValueError) as exc:
-        raise ToolError(f"invalid base64 input: {exc}") from exc
-    if not data:
-        raise ToolError("decoded file content is empty")
-
-    if not zipfile.is_zipfile(io.BytesIO(data)):
-        raise ToolError(f"invalid {fmt} file: not a valid OOXML container")
-
-    if shutil.which("soffice") is None:
-        raise ToolError("LibreOffice (soffice) is not available on the server")
-
-    with tempfile.TemporaryDirectory(prefix="convert_to_pdf_") as tmpdir:
-        source = Path(tmpdir) / f"input.{fmt}"
-        source.write_bytes(data)
-        profile = Path(tmpdir) / "lo-profile"
-        profile.mkdir()
-        result_file = Path(tmpdir) / "input.pdf"
-        cmd = [
-            "soffice",
-            "--headless",
-            f"-env:UserInstallation=file://{profile}",
-            "--convert-to",
-            "pdf",
-            "--outdir",
-            tmpdir,
-            str(source),
-        ]
-        try:
-            process = subprocess.run(cmd, capture_output=True, timeout=120, check=False)
-        except subprocess.TimeoutExpired as exc:
-            raise ToolError(f"conversion timed out for {fmt}") from exc
-        if process.returncode != 0 or not result_file.exists():
-            detail = process.stderr.decode(errors="replace").strip()
-            raise ToolError(f"conversion failed for {fmt}: {detail or 'unknown error'}")
-        object_name = f"pdf/{uuid.uuid4()}.pdf"
-        return GenerationResult(
-            url=await upload_document(
-                result_file.read_bytes(), object_name, _PDF_CONTENT_TYPE
-            )
-        )
+    pdf_bytes = await asyncio.to_thread(_convert_office_to_pdf_bytes, content, fmt)
+    object_name = f"pdf/{uuid.uuid4()}.pdf"
+    return GenerationResult(
+        url=await upload_document(pdf_bytes, object_name, _PDF_CONTENT_TYPE)
+    )

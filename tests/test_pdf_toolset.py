@@ -1,8 +1,10 @@
 """Tests for the pdf toolset, driven through the public MCP tool interface."""
 
+import asyncio
 import base64
 import io
 import shutil
+import time
 from pathlib import Path
 
 import pytest
@@ -544,3 +546,65 @@ async def test_generate_pdf_style_distinction_between_elements():
 async def test_generate_pdf_whitespace_only_returns_error():
     result = await call_generate_pdf_error("   \n\t  ")
     assert "text" in result.content[0].text
+
+
+# --- Event-Loop-Responsiveness ----------------------------------------------
+
+
+async def _loop_drift(ticks: int = 40, interval: float = 0.01) -> float:
+    """Extra time (s) a ticks x interval await loop needs on the running loop.
+
+    A blocking call running on the event loop stalls every await, so the
+    drift grows by the remaining block duration; work offloaded to a
+    thread leaves only scheduling noise.
+    """
+    start = time.perf_counter()
+    for _ in range(ticks):
+        await asyncio.sleep(interval)
+    return time.perf_counter() - start - ticks * interval
+
+
+async def test_generate_pdf_does_not_block_event_loop(monkeypatch):
+    def slow_render(html: str) -> bytes:
+        time.sleep(0.5)
+        return b"%PDF-fake"
+
+    monkeypatch.setattr("assistant_mcp.toolsets.pdf._render_html_to_pdf", slow_render)
+    task = asyncio.get_running_loop().create_task(call_generate_pdf("<p>Langsam</p>"))
+    drift = await _loop_drift()
+    assert drift < 0.25, drift
+    assert not task.done(), "ticker must finish while the slow call is still pending"
+    result = await task
+    assert not result.is_error, result.content[0].text
+
+
+async def test_generate_pdf_markdown_route_does_not_block_event_loop(monkeypatch):
+    def slow_render(markdown: str) -> bytes:
+        time.sleep(0.5)
+        return b"%PDF-fake"
+
+    monkeypatch.setattr("assistant_mcp.toolsets.pdf._render_markdown_to_pdf", slow_render)
+    task = asyncio.get_running_loop().create_task(call_generate_pdf("# Langsam\n"))
+    drift = await _loop_drift()
+    assert drift < 0.25, drift
+    assert not task.done(), "ticker must finish while the slow call is still pending"
+    result = await task
+    assert not result.is_error, result.content[0].text
+
+
+async def test_convert_to_pdf_does_not_block_event_loop(monkeypatch):
+    def slow_convert(content: str, fmt: str) -> bytes:
+        time.sleep(0.5)
+        return b"%PDF-fake"
+
+    monkeypatch.setattr(
+        "assistant_mcp.toolsets.pdf._convert_office_to_pdf_bytes", slow_convert
+    )
+    task = asyncio.get_running_loop().create_task(
+        call_convert_to_pdf(base64.b64encode(b"datei").decode(), "docx")
+    )
+    drift = await _loop_drift()
+    assert drift < 0.25, drift
+    assert not task.done(), "ticker must finish while the slow call is still pending"
+    result = await task
+    assert not result.is_error, result.content[0].text

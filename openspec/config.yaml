@@ -25,7 +25,9 @@ rules:
     - >-
       Tests SHALL verify observable behavior through the public interfaces of
       the system (tools, endpoints, commands, public functions), never through
-      implementation details.
+      implementation details. Fault or latency injection may patch internal
+      helpers when the condition cannot be produced through the public
+      interface; the assertions still target observable behavior.
     - >-
       Configuration keys and other cross-module strings (environment variable
       names, secret names, CLI flags) SHALL be defined once as named constants

@@ -8,7 +8,8 @@ and is registered in `TOOLSETS` (`src/assistant_mcp/toolsets/__init__.py`). Tool
 flat `Annotated[type, Field(...)]` parameters; outputs are structured
 (pydantic model, `Image`, or `ToolResult`), never plain strings;
 if possible implement tools async (offload blocking SDK calls via
-`asyncio.to_thread` so the event loop is never blocked);
+`asyncio.to_thread` so the event loop is never blocked; enforced by the
+`does_not_block_event_loop` tests - extend them to every new toolset);
 toolset modules hold no cross-request state, except `lru_cache`-wrapped
 client builders. Parameter descriptions, examples, output structure, and
 statelessness are enforced by `tests/test_toolsets.py`; tests drive tools
