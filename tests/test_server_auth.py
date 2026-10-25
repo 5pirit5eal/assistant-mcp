@@ -149,9 +149,15 @@ async def test_stdio_transport_serves_without_authentication(monkeypatch):
     assert "pdf_generate_pdf" in {tool.name for tool in tools}
 
 
-async def test_unconfigured_server_serves_without_authentication(monkeypatch):
-    monkeypatch.delenv(MCP_SHARED_SECRET_AUTH, raising=False)
-    server = build_server()
+async def test_stdio_transport_stays_unauthenticated_with_auth_configured():
+    store = build_user_record_store(backend=MemoryStore())
+    await store.put(
+        key=secret_hash(SOME_SECRET),
+        value=UserRecord(
+            user_id="alice", label="Alice", created_at=datetime.now(UTC)
+        ),
+    )
+    server = build_server(auth=SharedSecretTokenVerifier(records=store))
     async with Client(server) as client:
         tools = await client.list_tools()
     assert "pdf_generate_pdf" in {tool.name for tool in tools}

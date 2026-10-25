@@ -123,7 +123,7 @@ class SharedSecretTokenVerifier(TokenVerifier):
 
     async def verify_token(self, token: str) -> AccessToken | None:
         """Return an access token for the user the presented secret belongs to."""
-        if not token.strip():
+        if not token:
             return None
         record = await self.records.get(key=secret_hash(token))
         if record is None:

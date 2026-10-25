@@ -97,7 +97,7 @@ validated by review and the repo's automated linters.
 
 Blocked by all groups above.
 
-- [ ] 6.1 Run the complete verification suite (pytest, ruff, mypy,
+- [x] 6.1 Run the complete verification suite (pytest, ruff, mypy,
   actionlint, markdownlint) and confirm it is green, then create a draft PR
   and let CI verify the branch. Verify: CI passes on the PR; work ends
   there — the post-deploy cutover steps in proposal.md are manual

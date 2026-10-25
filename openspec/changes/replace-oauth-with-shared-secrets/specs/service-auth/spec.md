@@ -35,13 +35,14 @@ rejected. The stdio transport MUST NOT require authentication.
 
 The system SHALL activate shared-secret authentication only when the
 activation configuration value is present and set to `true`. With the value
-absent, the service SHALL start and operate without authentication. With the
-value present but set to anything other than a valid activation value, the
-service MUST refuse to start with an error naming the configuration value.
+absent or blank, the service SHALL start and operate without
+authentication. With the value set to anything other than a valid
+activation value or blank, the service MUST refuse to start with an error
+naming the configuration value.
 
 #### Scenario: Unconfigured service runs without authentication
 
-- **WHEN** the service starts without the activation configuration value in the environment
+- **WHEN** the service starts without the activation configuration value in the environment, or with it blank
 - **THEN** it starts successfully and serves requests without authentication
 
 #### Scenario: Configured service enforces authentication

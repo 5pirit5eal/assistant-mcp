@@ -33,12 +33,13 @@ async def register_user(
     label: str | None,
     backend: AsyncKeyValue | None = None,
 ) -> str:
-    """Register a user and print the generated secret exactly once.
+    """Register a user and return the generated secret.
 
     A previous registration of the same user id is replaced: its hash-keyed
     record is deleted before the new one is written, so the old secret stops
     authorizing once the auth cache has expired. ``backend`` overrides the
-    Firestore default for tests. Returns the generated secret.
+    Firestore default for tests. The caller is responsible for displaying
+    the returned secret exactly once; it cannot be recovered later.
     """
     resolved_label = user_id if label is None else label
     records = build_user_record_store(backend=backend)
@@ -57,12 +58,6 @@ async def register_user(
         ),
     )
     await index.put(key=user_id, value=UserIndexEntry(secret_hash=digest))
-    print(f"Shared secret for user {user_id!r} (label {resolved_label!r}):")
-    print(secret)
-    print(
-        "WARNING: this secret cannot be displayed again. "
-        "If it is lost, re-register the user to issue a new one."
-    )
     return secret
 
 
@@ -85,9 +80,21 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 async def main(argv: Sequence[str] | None = None, backend: AsyncKeyValue | None = None) -> str:
-    """Run the registration CLI; returns the generated secret."""
+    """Run the registration CLI; returns the generated secret.
+
+    The secret is printed exactly once here, with an explicit warning that
+    it cannot be displayed again; a lost secret is re-issued by
+    re-registering the user.
+    """
     args = parse_args(argv)
-    return await register_user(args.user_id, args.label, backend=backend)
+    secret = await register_user(args.user_id, args.label, backend=backend)
+    print(f"Shared secret for user {args.user_id!r} (label {args.label or args.user_id!r}):")
+    print(secret)
+    print(
+        "WARNING: this secret cannot be displayed again. "
+        "If it is lost, re-register the user to issue a new one."
+    )
+    return secret
 
 
 if __name__ == "__main__":
