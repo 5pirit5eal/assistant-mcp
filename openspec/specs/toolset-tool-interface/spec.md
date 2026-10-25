@@ -48,3 +48,22 @@ The server MUST NOT expose the `echo` and `time` bootstrap toolsets. The toolset
 
 - **WHEN** a client connects to each toolset registered in the toolset registry
 - **THEN** every toolset mounts successfully and all of its tools comply with the input and output requirements above
+
+### Requirement: Tools offload blocking work off the event loop
+
+Every tool exposed by a registered toolset MUST perform blocking work (document rendering, subprocess execution, file I/O, network uploads) off the asyncio event loop, so that a long-running tool call does not prevent the server from serving other concurrent tool calls. Validation and error behavior MUST stay unchanged: a tool that fails MUST still return the same meaningful error instead of a result, regardless of which thread performed the work.
+
+#### Scenario: Event loop stays responsive during slow tool work
+
+- **WHEN** a client calls a tool that performs slow blocking work (such as PDF rendering or an Office conversion) while another client concurrently invokes a fast tool on the same server
+- **THEN** the fast call completes without waiting for the slow call to finish, instead of stalling until the blocking work is done
+
+#### Scenario: Tool errors surface unchanged after offloading
+
+- **WHEN** a client calls a tool whose offloaded work fails (for example an invalid Office container or a rendering failure)
+- **THEN** the tool returns the same meaningful error message as before the offloading, instead of a result or an unhandled exception
+
+#### Scenario: Results are unchanged after offloading
+
+- **WHEN** a client calls any tool after the offloading change
+- **THEN** the tool returns the same structured output as before the change for equivalent input
