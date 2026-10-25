@@ -13,25 +13,26 @@ enabled.
 
 ### Requirement: Authenticated access to the HTTP service
 
-When OAuth configuration is present, the system SHALL require a valid access
-token issued by the service's OAuth layer for every HTTP request to the service,
-including tool listing and tool calls. Requests without a token or with an
-invalid or expired token MUST be rejected. The stdio transport MUST NOT require
-authentication.
+When shared-secret authentication is activated, the system SHALL require a
+valid shared secret registered for a user for every HTTP request to the
+service, including tool listing and tool calls, presented in the
+`Authorization: Bearer <secret>` header. Requests without a secret or with a
+secret that does not match a registered, non-revoked user record MUST be
+rejected. The stdio transport MUST NOT require authentication.
 
 #### Scenario: Unauthenticated HTTP request is rejected
 
-- **WHEN** a client sends an HTTP request to the service without an access token
+- **WHEN** a client sends an HTTP request to the service without a bearer token
 - **THEN** the request is rejected and no toolset information or tool result is returned
 
 #### Scenario: Invalid token is rejected
 
-- **WHEN** a client sends an HTTP request with a malformed, invalid, or expired token
+- **WHEN** a client sends an HTTP request with a bearer token that matches no registered user record
 - **THEN** the request is rejected and no toolset information or tool result is returned
 
 #### Scenario: Authenticated client can use tools
 
-- **WHEN** a client presents a valid access token and lists tools or calls a tool
+- **WHEN** a client presents the secret of a registered user and lists tools or calls a tool
 - **THEN** the request is served as if the service were unauthenticated
 
 #### Scenario: stdio transport stays local
@@ -39,105 +40,46 @@ authentication.
 - **WHEN** the service runs with the stdio transport
 - **THEN** no authentication is required
 
-### Requirement: OAuth 2.1 authorization flow via Google
-
-The system SHALL expose the OAuth 2.1 endpoints required by the Model Context
-Protocol for protected resources: protected-resource metadata, authorization,
-token, and dynamic client registration. The authorization flow SHALL use the
-authorization-code grant with PKCE and SHALL delegate user authentication to
-Google, returning tokens that grant access to the service. An interactive client
-MUST be able to complete the flow with a browser login against a Google account.
-
-#### Scenario: Client completes browser login
-
-- **WHEN** an interactive MCP client connects, follows the advertised authorization flow, and the user signs in with a Google account
-- **THEN** the client receives a token that is accepted by the service
-
-#### Scenario: OAuth metadata is discoverable
-
-- **WHEN** a client requests the service's OAuth 2.1 metadata endpoints
-- **THEN** the service advertises the authorization, token, and registration endpoints it serves
-
-### Requirement: Account allowlist
-
-The system SHALL grant access only to Google accounts explicitly listed in the
-allowlist configuration. The identity of the authenticated Google account MUST be
-checked against the allowlist before access is granted. A user who authenticates
-successfully with Google but whose account is not on the allowlist MUST NOT
-receive a usable token for the service.
-
-#### Scenario: Allowlisted account gets access
-
-- **WHEN** a user completes the authorization flow with an allowlisted Google account
-- **THEN** the issued token is accepted by the service
-
-#### Scenario: Non-allowlisted account is denied
-
-- **WHEN** a user completes the authorization flow with a Google account that is not on the allowlist
-- **THEN** no usable token is issued for the service and access is denied
-
-### Requirement: Persistent and encrypted OAuth state
-
-The system SHALL persist the OAuth state (client registrations and token
-records) in a storage backend that survives service restarts and cold starts,
-using the configured storage encryption key. Persisted state MUST be encrypted
-before it is written to the storage backend; plaintext token material MUST NOT
-be written to the backend. A client that has completed authentication MUST NOT
-be forced to re-authenticate because the service restarted.
-
-#### Scenario: Login survives a restart
-
-- **WHEN** a client has completed the authorization flow and the service restarts with access to the same storage and the same storage encryption key
-- **THEN** the client's existing token remains accepted without a new login
-
-#### Scenario: Persisted state is encrypted at rest
-
-- **WHEN** OAuth state is written to the storage backend
-- **THEN** the stored values are encrypted with the configured key and contain no plaintext token material
-
-#### Scenario: State without the key is unusable
-
-- **WHEN** persisted state is read without the storage encryption key
-- **THEN** it cannot be decrypted and is treated as absent, forcing re-registration rather than exposing token material
-
 ### Requirement: Authentication activation through configuration
 
-The system SHALL activate the OAuth layer only when its required configuration
-values (client credentials, public base URL, account allowlist, and storage
-encryption key) are present in the environment. With the configuration absent,
-the service SHALL start and operate without authentication. With the
-configuration present but incomplete, the service MUST refuse to start.
+The system SHALL activate shared-secret authentication only when the
+activation configuration value is present and set to `true`. With the value
+absent or blank, the service SHALL start and operate without
+authentication. With the value set to anything other than a valid
+activation value or blank, the service MUST refuse to start with an error
+naming the configuration value.
 
 #### Scenario: Unconfigured service runs without authentication
 
-- **WHEN** the service starts without OAuth configuration in the environment
+- **WHEN** the service starts without the activation configuration value in the environment, or with it blank
 - **THEN** it starts successfully and serves requests without authentication
 
 #### Scenario: Configured service enforces authentication
 
-- **WHEN** the service starts with complete OAuth configuration in the environment
-- **THEN** it starts successfully and requires valid tokens for HTTP access
+- **WHEN** the service starts with the activation configuration value set to `true`
+- **THEN** it starts successfully and requires a valid registered secret for HTTP access
 
 #### Scenario: Incomplete configuration fails fast
 
-- **WHEN** the service starts with only some of the required OAuth configuration values present
-- **THEN** it fails at startup with an error naming the missing configuration
+- **WHEN** the service starts with the activation configuration value set to a value other than `true` or absent
+- **THEN** it fails at startup with an error naming the configuration value
 
 ### Requirement: Identity availability for tools
 
-The system SHALL make the authenticated caller's identity available to
-tools during a tool call when the HTTP transport is configured with
-authentication. Tools MAY use this identity to key user-specific data.
-When no authentication is configured or the caller is not authenticated,
-the system SHALL not fail tool execution solely because no identity is
-available; tools decide how to handle the absent identity.
+The system SHALL make the authenticated caller's identity available to tools
+during a tool call when the HTTP transport is configured with
+authentication; the identity SHALL be the registered user identifier of the
+user whose secret the caller presented. Tools MAY use this identity to key
+user-specific data. When no authentication is configured or the caller is not
+authenticated, the system SHALL not fail tool execution solely because no
+identity is available; tools decide how to handle the absent identity.
 
 #### Scenario: Tool receives the authenticated identity
 
-- **WHEN** a client with a valid access token calls a tool and the tool
+- **WHEN** a client with a valid registered secret calls a tool and the tool
   requests the caller's identity
-- **THEN** the identity derived from the token (including its email claim)
-  is available to the tool
+- **THEN** the registered user identifier of the matching user record is
+  available to the tool
 
 #### Scenario: Tool runs without identity
 
@@ -146,69 +88,62 @@ available; tools decide how to handle the absent identity.
 - **THEN** no identity is returned and the tool call itself is not rejected
   for that reason
 
-### Requirement: Race-tolerant refresh token rotation
+### Requirement: Per-user secret registration
 
-When a refresh token has already been consumed by a previous successful refresh,
-the system SHALL, for a configurable grace period after that refresh (default
-60 seconds), respond to a further refresh request presenting the consumed token
-with the same token response the previous refresh issued, instead of rejecting
-it. The replayed response SHALL be identical for all concurrent refreshes
-presenting the same consumed token within the grace period, so parallel client
-sessions converge on one token set. After the grace period has elapsed, the
-system MUST reject a refresh presenting the consumed token with an
-authorization error that forces re-authentication. The grace mapping MUST be
-persisted in the same encrypted OAuth state storage as the token records and
-MUST expire with the grace period; replay beyond the grace period or of tokens
-that were never issued by the service MUST NOT succeed.
+The system SHALL provide an admin command that registers a user by a
+user identifier with an optional display label: the command generates a
+cryptographically random secret, persists a user record containing the user
+identifier, the display label, a one-way hash of the secret, and the
+registration time, and displays the plaintext secret exactly once in its
+output. Registering a user identifier that already has a record SHALL replace
+the previous record, so the previous secret stops being accepted once the
+verification cache has expired.
 
-#### Scenario: Concurrent refreshes converge on one token set
+#### Scenario: Registration issues a secret once
 
-- **WHEN** two refresh requests presenting the same refresh token arrive while the first one is being processed or shortly after it completed
-- **THEN** both requests succeed and the second one receives the same token response the first one issued, so both client sessions hold the same valid token set
+- **WHEN** the admin command registers a new user
+- **THEN** it writes a user record and prints the generated secret exactly once, and the printed secret grants access to the service
 
-#### Scenario: Late refresh beyond the grace period is rejected
+#### Scenario: Re-registration invalidates the old secret
 
-- **WHEN** a refresh request presents a refresh token that was consumed more than the grace period ago
-- **THEN** the request is rejected with an error that forces re-authentication
+- **WHEN** the admin command registers a user identifier that already has a record
+- **THEN** the previous record is replaced and the previously issued secret is no longer accepted once the verification cache has expired
 
-#### Scenario: Unknown tokens never succeed
+#### Scenario: Display label is stored
 
-- **WHEN** a refresh request presents a token string the service never issued
-- **THEN** the request is rejected with an error that forces re-authentication
+- **WHEN** the admin command registers a user with a display label
+- **THEN** the stored user record carries the label so the registration can be identified without exposing the secret
 
-#### Scenario: Grace mapping survives a restart within its window
+### Requirement: Hash-only secret storage
 
-- **WHEN** a refresh token was consumed and the service restarts within the grace period with access to the same OAuth state storage
-- **THEN** a refresh presenting the consumed token still receives the replayed response until the grace period elapses
+The system SHALL store only a one-way hash of each registered secret in the
+user records. The plaintext secret MUST NOT be persisted in the user
+records or any other storage. Verification of a presented secret SHALL
+compare a one-way hash of the presented value against the stored hash.
 
-#### Scenario: Invalid grace period fails fast
+#### Scenario: User record contains no plaintext secret
 
-- **WHEN** the service starts with a grace period configuration that is not a positive integer number of seconds
-- **THEN** it fails at startup with an error naming the invalid configuration value
+- **WHEN** a user is registered and the stored record is inspected
+- **THEN** it contains a hash of the secret and no material from which the secret can be recovered
 
-### Requirement: Configurable service-issued access-token lifetime
+#### Scenario: Verification hashes the presented token
 
-The system SHALL support an optional configuration value for the lifetime of
-the access tokens it issues to clients, decoupled from the upstream identity
-provider's access-token lifetime. When the value is configured, issued access
-tokens MUST carry that lifetime; when it is absent, the service MUST fall back
-to its built-in default (12 hours). The value MUST NOT affect the lifetime of
-upstream identity-provider tokens, which the service refreshes independently.
-The activation contract of the OAuth layer SHALL remain unchanged: the
-lifetime value is optional and neither activates nor deactivates
-authentication.
+- **WHEN** a client presents a secret in the Authorization header
+- **THEN** the service accepts or rejects it based on a comparison against the stored hash, not against a stored plaintext value
 
-#### Scenario: Configured lifetime is issued
+### Requirement: Revocation by record deletion
 
-- **WHEN** the access-token lifetime configuration is set to a valid number of seconds and a client completes a token exchange
-- **THEN** the issued access token expires after the configured number of seconds
+The system SHALL revoke a user's access when the user record is deleted. A
+deleted user's secret MUST be rejected once the verification cache entry for
+it has expired; the verification cache SHALL expire entries within a bounded,
+short time-to-live, so a revoked secret stops working within that delay.
 
-#### Scenario: Default lifetime without configuration
+#### Scenario: Deleted user's access ends within the cache delay
 
-- **WHEN** no access-token lifetime configuration is present and a client completes a token exchange
-- **THEN** the issued access token expires after the built-in default lifetime
+- **WHEN** a user record is deleted and the verification cache entry for that secret has expired
+- **THEN** the deleted user's secret is rejected on the next request
 
-#### Scenario: Invalid lifetime fails fast
+#### Scenario: Revocation latency is bounded
 
-- **WHEN** the service starts with an access-token lifetime configuration that is not a positive integer number of seconds
-- **THEN** it fails at startup with an error naming the invalid configuration value
+- **WHEN** a user record is deleted
+- **THEN** the deleted user's secret is rejected no later than the verification cache's time-to-live after the deletion
