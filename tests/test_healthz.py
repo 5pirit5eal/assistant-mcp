@@ -27,7 +27,7 @@ def _asgi_client(app) -> httpx2.AsyncClient:
 
 
 @pytest.mark.parametrize("stateless_http", [True, False], ids=["stateless", "stateful"])
-async def test_healthz_returns_ok_when_unconfigured(cleared_oauth_env, stateless_http):
+async def test_healthz_returns_ok_when_unconfigured(cleared_auth_env, stateless_http):
     server = build_server()
     async with _asgi_client(server.http_app(stateless_http=stateless_http)) as client:
         response = await client.get("/healthz")

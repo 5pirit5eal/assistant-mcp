@@ -1,312 +1,177 @@
-"""Tests for the OAuth 2.1 auth factory in assistant_mcp.auth."""
+"""Tests for the shared-secret auth layer in assistant_mcp.auth."""
 
+import asyncio
+import hashlib
 import json
+from datetime import UTC, datetime
 
 import pytest
-from cryptography.fernet import Fernet
-from fastmcp.server.auth import AccessToken, TokenVerifier
+from fastmcp.server.auth import TokenVerifier
 from key_value.aio.stores.memory import MemoryStore
 
 from assistant_mcp.auth import (
-    DEFAULT_REFRESH_GRACE_SECONDS,
-    GOOGLE_CLIENT_ID,
-    GOOGLE_CLIENT_SECRET,
-    MCP_ACCESS_TOKEN_TTL_SECONDS,
-    MCP_ALLOWED_EMAILS,
-    MCP_BASE_URL,
-    MCP_OAUTH_STORAGE_KEY,
-    MCP_REFRESH_GRACE_SECONDS,
-    OAUTH_CACHE_TTL_SECONDS,
-    OAUTH_ENV_VARS,
-    AllowlistGoogleProvider,
-    AllowlistTokenVerifier,
+    AUTH_CACHE_TTL_SECONDS,
+    MCP_SHARED_SECRET_AUTH,
+    USER_COLLECTION,
     AuthConfigError,
-    build_client_storage,
-    create_auth_provider,
+    SharedSecretTokenVerifier,
+    UserIndexEntry,
+    UserRecord,
+    build_user_index_store,
+    build_user_record_store,
+    create_token_verifier,
+    secret_hash,
 )
 
-FERNET_KEY = Fernet.generate_key().decode()
-CLIENT_ID = "123456789.apps.googleusercontent.com"
-CLIENT_SECRET = "GOCSPX-test-secret"
-BASE_URL = "https://assistant-mcp.example.com"
-ALLOWED_EMAILS = "user@example.com,other@example.com"
+
+def test_activation_flag_absent_returns_no_verifier():
+    assert create_token_verifier(env={}, backend=MemoryStore()) is None
 
 
-def complete_env() -> dict[str, str]:
-    return {
-        GOOGLE_CLIENT_ID: CLIENT_ID,
-        GOOGLE_CLIENT_SECRET: CLIENT_SECRET,
-        MCP_BASE_URL: BASE_URL,
-        MCP_ALLOWED_EMAILS: ALLOWED_EMAILS,
-        MCP_OAUTH_STORAGE_KEY: FERNET_KEY,
-    }
+@pytest.mark.parametrize("value", ["", "   "])
+def test_activation_flag_blank_returns_no_verifier(value):
+    env = {MCP_SHARED_SECRET_AUTH: value}
+    assert create_token_verifier(env=env, backend=MemoryStore()) is None
 
 
-def test_env_var_constants_cover_the_activation_contract():
-    assert OAUTH_ENV_VARS == (
-        GOOGLE_CLIENT_ID,
-        GOOGLE_CLIENT_SECRET,
-        MCP_BASE_URL,
-        MCP_ALLOWED_EMAILS,
-        MCP_OAUTH_STORAGE_KEY,
+@pytest.mark.parametrize("value", ["true", "TRUE", "True"])
+def test_activation_flag_true_returns_verifier(value):
+    env = {MCP_SHARED_SECRET_AUTH: value}
+    verifier = create_token_verifier(env=env, backend=MemoryStore())
+    assert isinstance(verifier, TokenVerifier)
+
+
+@pytest.mark.parametrize("value", ["false", "yes", "1", "on"])
+def test_activation_flag_invalid_value_fails_fast(value):
+    env = {MCP_SHARED_SECRET_AUTH: value}
+    with pytest.raises(AuthConfigError, match=MCP_SHARED_SECRET_AUTH):
+        create_token_verifier(env=env, backend=MemoryStore())
+
+
+async def test_activated_factory_returns_shared_secret_verifier():
+    env = {MCP_SHARED_SECRET_AUTH: "true"}
+    verifier = create_token_verifier(env=env, backend=MemoryStore())
+    assert isinstance(verifier, SharedSecretTokenVerifier)
+
+
+def test_auth_cache_ttl_is_bounded_short():
+    assert AUTH_CACHE_TTL_SECONDS == 60
+
+
+def _user_record() -> UserRecord:
+    return UserRecord(
+        user_id="alice",
+        label="Alice",
+        created_at=datetime.now(UTC),
     )
 
 
-def test_default_refresh_grace_matches_spec_default():
-    assert DEFAULT_REFRESH_GRACE_SECONDS == 60
-
-
-def test_unconfigured_environment_returns_no_auth():
-    provider = create_auth_provider(env={}, storage_backend=MemoryStore())
-    assert provider is None
-
-
-def test_partial_configuration_raises_naming_missing_variables():
-    env = {GOOGLE_CLIENT_ID: CLIENT_ID}
-    with pytest.raises(AuthConfigError) as excinfo:
-        create_auth_provider(env=env, storage_backend=MemoryStore())
-    message = str(excinfo.value)
-    for missing in OAUTH_ENV_VARS:
-        if missing == GOOGLE_CLIENT_ID:
-            continue
-        assert missing in message, f"{missing} not named in error: {message}"
-
-
-@pytest.mark.parametrize(
-    "base_url",
-    ["http://assistant-mcp.example.com", "https://", "https:///foo", "assistant-mcp.example.com"],
-)
-def test_non_absolute_https_base_url_is_rejected(base_url):
-    with pytest.raises(AuthConfigError, match=MCP_BASE_URL):
-        create_auth_provider(
-            env=complete_env() | {MCP_BASE_URL: base_url},
-            storage_backend=MemoryStore(),
-        )
-
-
-def test_invalid_storage_key_fails_fast():
-    env = complete_env() | {MCP_OAUTH_STORAGE_KEY: "not-a-fernet-key"}
-    with pytest.raises(AuthConfigError, match=MCP_OAUTH_STORAGE_KEY):
-        create_auth_provider(env=env, storage_backend=MemoryStore())
-
-
-@pytest.mark.parametrize("value", ["0", "-5", "abc", "2.5"])
-def test_invalid_access_token_ttl_fails_fast(value):
-    env = complete_env() | {MCP_ACCESS_TOKEN_TTL_SECONDS: value}
-    with pytest.raises(AuthConfigError, match=MCP_ACCESS_TOKEN_TTL_SECONDS):
-        create_auth_provider(env=env, storage_backend=MemoryStore())
-
-
-@pytest.mark.parametrize("value", ["0", "-5", "abc", "2.5"])
-def test_invalid_refresh_grace_fails_fast(value):
-    env = complete_env() | {MCP_REFRESH_GRACE_SECONDS: value}
-    with pytest.raises(AuthConfigError, match=MCP_REFRESH_GRACE_SECONDS):
-        create_auth_provider(env=env, storage_backend=MemoryStore())
-
-
-def test_complete_configuration_returns_google_provider():
-    provider = create_auth_provider(env=complete_env(), storage_backend=MemoryStore())
-    assert provider is not None
-    assert str(provider.base_url).rstrip("/") == BASE_URL
-    assert provider.required_scopes == [
-        "openid",
-        "https://www.googleapis.com/auth/userinfo.email",
-    ]
-
-
-def test_factory_wires_allowlist_into_provider():
-    provider = create_auth_provider(env=complete_env(), storage_backend=MemoryStore())
-    assert isinstance(provider, AllowlistGoogleProvider)
-    assert provider.allowed_emails == {
-        "user@example.com",
-        "other@example.com",
-    }
-
-
-class StubInnerVerifier(TokenVerifier):
-    """Inner token verifier returning a fixed access token, no network."""
-
-    def __init__(self, claims: dict[str, object]) -> None:
-        super().__init__()
-        self.claims = claims
-
-    async def verify_token(self, token: str) -> AccessToken | None:
-        return AccessToken(
-            token=token,
-            client_id="google-sub",
-            scopes=["openid"],
-            claims=dict(self.claims),
-        )
-
-
-class RejectingInnerVerifier(TokenVerifier):
-    async def verify_token(self, token: str) -> AccessToken | None:
-        return None
-
-
-async def test_allowlist_verifier_passes_allowlisted_email():
-    inner = StubInnerVerifier({"email": "user@example.com"})
-    verifier = AllowlistTokenVerifier(inner=inner, allowed_emails={"user@example.com"})
-    result = await verifier.verify_token("token")
-    assert result is not None
-    assert result.claims["email"] == "user@example.com"
-
-
-async def test_allowlist_verifier_rejects_other_email():
-    inner = StubInnerVerifier({"email": "stranger@example.com"})
-    verifier = AllowlistTokenVerifier(inner=inner, allowed_emails={"user@example.com"})
-    assert await verifier.verify_token("token") is None
-
-
-async def test_allowlist_verifier_matches_case_insensitively():
-    inner = StubInnerVerifier({"email": "USER@Example.com"})
-    verifier = AllowlistTokenVerifier(inner=inner, allowed_emails={"user@example.com"})
-    assert await verifier.verify_token("token") is not None
-
-
-async def test_allowlist_verifier_rejects_missing_email():
-    inner = StubInnerVerifier({})
-    verifier = AllowlistTokenVerifier(inner=inner, allowed_emails={"user@example.com"})
-    assert await verifier.verify_token("token") is None
-
-
-async def test_allowlist_verifier_passes_through_rejected_tokens():
-    verifier = AllowlistTokenVerifier(
-        inner=RejectingInnerVerifier(), allowed_emails={"user@example.com"}
-    )
-    assert await verifier.verify_token("token") is None
-
-
-def _fernet(key: str) -> Fernet:
-    return Fernet(key.encode())
-
-
-async def test_storage_writes_ciphertext_to_backend():
+async def test_user_record_persists_identity_fields():
     backend = MemoryStore()
-    storage = build_client_storage(_fernet(FERNET_KEY), backend)
-    await storage.put(
-        "client-1",
-        {"client_secret_token": "top-secret-token-material"},
-        collection="mcp-oauth-proxy-clients",
-    )
-    raw = await backend.get("client-1", collection="mcp-oauth-proxy-clients")
+    store = build_user_record_store(backend=backend)
+    record = _user_record()
+    secret = "a-registered-test-secret"
+    await store.put(key=secret_hash(secret), value=record)
+    loaded = await store.get(key=secret_hash(secret))
+    assert loaded == record
+    assert loaded is not None and loaded.user_id == "alice"
+    assert loaded.label == "Alice"
+    assert loaded.created_at == record.created_at
+
+
+async def test_document_key_is_sha256_of_the_secret():
+    backend = MemoryStore()
+    store = build_user_record_store(backend=backend)
+    secret = "a-registered-test-secret"
+    await store.put(key=secret_hash(secret), value=_user_record())
+    keys = await backend.keys(collection=USER_COLLECTION)
+    assert keys == [hashlib.sha256(secret.encode()).hexdigest()]
+    assert secret not in keys
+
+
+async def test_stored_record_holds_no_recoverable_secret_material():
+    backend = MemoryStore()
+    store = build_user_record_store(backend=backend)
+    secret = "a-registered-test-secret"
+    await store.put(key=secret_hash(secret), value=_user_record())
+    raw = await backend.get(secret_hash(secret), collection=USER_COLLECTION)
     assert raw is not None
-    assert "top-secret-token-material" not in json.dumps(raw)
-    assert "__encrypted_data__" in raw
+    serialized = json.dumps(raw)
+    assert secret not in serialized
+    assert set(raw) == {"user_id", "label", "created_at"}
 
 
-async def test_storage_state_survives_restart_on_shared_backend():
+async def test_cache_entries_expire_within_auth_cache_ttl():
     backend = MemoryStore()
-    first = build_client_storage(_fernet(FERNET_KEY), backend)
-    second = build_client_storage(_fernet(FERNET_KEY), backend)
-    await first.put(
-        "client-1",
-        {"client_secret_token": "top-secret-token-material"},
-        collection="mcp-oauth-proxy-clients",
-    )
-    value = await second.get("client-1", collection="mcp-oauth-proxy-clients")
-    assert value == {"client_secret_token": "top-secret-token-material"}
-
-
-async def test_state_without_storage_key_is_unusable():
-    backend = MemoryStore()
-    original = build_client_storage(_fernet(FERNET_KEY), backend)
-    rotated = build_client_storage(_fernet(Fernet.generate_key().decode()), backend)
-    await original.put(
-        "client-1",
-        {"client_secret_token": "top-secret-token-material"},
-        collection="mcp-oauth-proxy-clients",
-    )
-    assert await rotated.get("client-1", collection="mcp-oauth-proxy-clients") is None
-
-
-class CountingStore(MemoryStore):
-    """In-memory store that counts backend read and write operations."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.reads = 0
-        self.writes = 0
-
-    async def get(self, key, *, collection=None):
-        self.reads += 1
-        return await super().get(key, collection=collection)
-
-    async def ttl(self, key, *, collection=None):
-        self.reads += 1
-        return await super().ttl(key, collection=collection)
-
-    async def put(self, key, value, *, collection=None, ttl=None):
-        self.writes += 1
-        return await super().put(key, value, collection=collection, ttl=ttl)
-
-
-async def test_cache_serves_repeated_reads_with_one_backend_read():
-    backend = CountingStore()
     cache = MemoryStore()
-    storage = build_client_storage(_fernet(FERNET_KEY), backend, cache=cache)
-    await storage.put(
-        "client-1",
-        {"client_secret_token": "top-secret-token-material"},
-        collection="mcp-oauth-proxy-clients",
-    )
-    first = await storage.get("client-1", collection="mcp-oauth-proxy-clients")
-    second = await storage.get("client-1", collection="mcp-oauth-proxy-clients")
-    assert first == {"client_secret_token": "top-secret-token-material"}
-    assert second == {"client_secret_token": "top-secret-token-material"}
-    assert backend.reads <= 1
-    assert backend.writes == 1
-
-
-async def test_cache_write_persists_and_invalidates():
-    backend = CountingStore()
-    cache = MemoryStore()
-    storage = build_client_storage(_fernet(FERNET_KEY), backend, cache=cache)
-    await storage.put(
-        "client-1",
-        {"client_secret_token": "first-value"},
-        collection="mcp-oauth-proxy-clients",
-    )
-    assert await storage.get("client-1", collection="mcp-oauth-proxy-clients") == {
-        "client_secret_token": "first-value"
-    }
-    await storage.put(
-        "client-1",
-        {"client_secret_token": "second-value"},
-        collection="mcp-oauth-proxy-clients",
-    )
-    assert await storage.get("client-1", collection="mcp-oauth-proxy-clients") == {
-        "client_secret_token": "second-value"
-    }
-    assert backend.writes == 2
-
-
-async def test_cache_holds_no_plaintext_token_material():
-    backend = CountingStore()
-    cache = MemoryStore()
-    storage = build_client_storage(_fernet(FERNET_KEY), backend, cache=cache)
-    await storage.put(
-        "client-1",
-        {"client_secret_token": "top-secret-token-material"},
-        collection="mcp-oauth-proxy-clients",
-    )
-    await storage.get("client-1", collection="mcp-oauth-proxy-clients")
-    cached = await cache.get("client-1", collection="mcp-oauth-proxy-clients")
-    assert cached is not None
-    assert "top-secret-token-material" not in json.dumps(cached)
-    assert "__encrypted_data__" in cached
-
-
-async def test_cache_entries_expire_within_oauth_cache_ttl():
-    backend = CountingStore()
-    cache = MemoryStore()
-    storage = build_client_storage(_fernet(FERNET_KEY), backend, cache=cache)
-    await storage.put(
-        "client-1",
-        {"client_secret_token": "top-secret-token-material"},
-        collection="mcp-oauth-proxy-clients",
-    )
-    await storage.get("client-1", collection="mcp-oauth-proxy-clients")
-    _, ttl = await cache.ttl("client-1", collection="mcp-oauth-proxy-clients")
+    store = build_user_record_store(backend=backend, cache=cache)
+    secret = "a-registered-test-secret"
+    await store.put(key=secret_hash(secret), value=_user_record())
+    await store.get(key=secret_hash(secret))
+    _, ttl = await cache.ttl(secret_hash(secret), collection=USER_COLLECTION)
     assert ttl is not None
-    assert 0 < ttl <= OAUTH_CACHE_TTL_SECONDS
+    assert 0 < ttl <= AUTH_CACHE_TTL_SECONDS
+
+
+async def test_user_index_persists_current_secret_hash():
+    backend = MemoryStore()
+    store = build_user_index_store(backend=backend)
+    digest = secret_hash("alice-secret")
+    await store.put(key="alice", value=UserIndexEntry(secret_hash=digest))
+    loaded = await store.get(key="alice")
+    assert loaded == UserIndexEntry(secret_hash=digest)
+
+
+async def test_registered_secret_is_accepted_with_user_identity():
+    backend = MemoryStore()
+    store = build_user_record_store(backend=backend)
+    secret = "alice-secret"
+    await store.put(
+        key=secret_hash(secret),
+        value=UserRecord(
+            user_id="alice", label="Alice", created_at=datetime.now(UTC)
+        ),
+    )
+    verifier = SharedSecretTokenVerifier(records=store)
+    token = await verifier.verify_token(secret)
+    assert token is not None
+    assert token.client_id == "alice"
+    assert token.claims["user_id"] == "alice"
+    assert token.claims["label"] == "Alice"
+
+
+async def test_unknown_secret_is_rejected():
+    backend = MemoryStore()
+    store = build_user_record_store(backend=backend)
+    await store.put(
+        key=secret_hash("alice-secret"),
+        value=UserRecord(
+            user_id="alice", label="Alice", created_at=datetime.now(UTC)
+        ),
+    )
+    verifier = SharedSecretTokenVerifier(records=store)
+    assert await verifier.verify_token("never-registered-secret") is None
+
+
+async def test_empty_token_is_rejected():
+    backend = MemoryStore()
+    verifier = SharedSecretTokenVerifier(records=build_user_record_store(backend))
+    assert await verifier.verify_token("") is None
+
+
+async def test_deleted_record_stops_authorizing_after_cache_expiry():
+    backend = MemoryStore()
+    store = build_user_record_store(backend=backend, cache_ttl_seconds=1)
+    secret = "alice-secret"
+    await store.put(
+        key=secret_hash(secret),
+        value=UserRecord(
+            user_id="alice", label="Alice", created_at=datetime.now(UTC)
+        ),
+    )
+    verifier = SharedSecretTokenVerifier(records=store)
+    assert await verifier.verify_token(secret) is not None
+    await backend.delete(secret_hash(secret), collection=USER_COLLECTION)
+    assert await verifier.verify_token(secret) is not None
+    await asyncio.sleep(1.2)
+    assert await verifier.verify_token(secret) is None

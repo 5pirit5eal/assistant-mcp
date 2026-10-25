@@ -190,7 +190,7 @@ DETERMINISM_MARKDOWN = "# Determinism Probe\n\nFirst paragraph.\n\n- item one\n-
 
 
 async def test_two_server_instances_return_identical_tool_results(
-    cleared_oauth_env, fake_storage
+    cleared_auth_env, fake_storage
 ):
     extracted_texts = []
     for _ in range(2):

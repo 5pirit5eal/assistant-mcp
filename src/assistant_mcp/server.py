@@ -7,7 +7,7 @@ from fastmcp.server.auth import AuthProvider
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from .auth import create_auth_provider
+from .auth import create_token_verifier
 from .toolsets import TOOLSETS
 
 MCP_STATELESS_HTTP = "MCP_STATELESS_HTTP"
@@ -27,11 +27,11 @@ def build_server(auth: AuthProvider | None = None) -> FastMCP:
     """Assemble the FastMCP server from all registered toolsets.
 
     ``auth`` supplies the auth provider directly (test seam); by default it
-    comes from the OAuth environment configuration, which yields no
+    comes from the shared-secret environment configuration, which yields no
     authentication when unconfigured.
     """
     if auth is None:
-        auth = create_auth_provider()
+        auth = create_token_verifier()
     server = FastMCP(
         "assistant-mcp",
         instructions="Modular assistant MCP server.",

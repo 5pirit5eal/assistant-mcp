@@ -5,7 +5,7 @@ import os
 import pytest
 from fastmcp.server.auth import TokenVerifier
 
-from assistant_mcp.auth import OAUTH_ENV_VARS
+from assistant_mcp.auth import MCP_SHARED_SECRET_AUTH
 
 
 @pytest.hookimpl(wrapper=True)
@@ -38,8 +38,8 @@ def rejecting_token_verifier() -> RejectingTokenVerifier:
 
 
 @pytest.fixture
-def cleared_oauth_env(monkeypatch) -> None:
-    """Ensure no OAuth activation variables are set for the test."""
-    for name in OAUTH_ENV_VARS:
+def cleared_auth_env(monkeypatch) -> None:
+    """Ensure no auth activation variables are set for the test."""
+    for name in (MCP_SHARED_SECRET_AUTH,):
         monkeypatch.delenv(name, raising=False)
     return None
