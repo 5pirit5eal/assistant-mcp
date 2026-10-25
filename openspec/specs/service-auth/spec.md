@@ -3,10 +3,11 @@
 ## Purpose
 
 Defines who may use the HTTP-exposed assistant-mcp service and how callers prove
-their identity: an OAuth 2.1 layer in front of all tools, with Google as the
-identity provider, an explicit account allowlist enforced by the service itself,
-encrypted persistence of the OAuth state that survives restarts, and a
-configuration contract that activates authentication only when fully configured.
+their identity: per-user shared secrets presented as bearer tokens and verified
+against hash-only user records in Firestore, a registration lifecycle that
+issues each user an individual secret and revokes by record deletion, and a
+configuration contract that activates authentication only when explicitly
+enabled.
 
 ## Requirements
 

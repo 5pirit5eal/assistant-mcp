@@ -109,7 +109,7 @@ async def test_stateless_default_serves_mcp_statelessly(
 
 
 async def test_stateless_initialize_succeeds_without_session_header(
-    cleared_oauth_env, monkeypatch
+    cleared_auth_env, monkeypatch
 ):
     monkeypatch.delenv(MCP_STATELESS_HTTP, raising=False)
     stateless = resolve_stateless_http()
@@ -142,7 +142,7 @@ async def test_override_false_serves_get_with_auth_challenge(
 
 
 async def test_override_false_initialize_returns_session_header(
-    cleared_oauth_env, monkeypatch
+    cleared_auth_env, monkeypatch
 ):
     monkeypatch.setenv(MCP_STATELESS_HTTP, "false")
     stateless = resolve_stateless_http()
@@ -160,7 +160,7 @@ async def test_override_false_initialize_returns_session_header(
 
 
 async def test_tools_remain_callable_in_memory_with_stateless_http_set(
-    cleared_oauth_env, monkeypatch
+    cleared_auth_env, monkeypatch
 ):
     monkeypatch.setenv(MCP_STATELESS_HTTP, "true")
     monkeypatch.setenv(GCS_BUCKET_ENV, "test-bucket")

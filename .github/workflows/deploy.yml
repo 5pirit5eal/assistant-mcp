@@ -77,16 +77,6 @@ jobs:
             echo "  gh variable set WORKLOAD_IDENTITY_PROVIDER --body '$pool/github-actions/providers/github-com'" >&2
             exit 1
           fi
-      - name: Check OAuth allowlist variable
-        env:
-          ALLOWED_EMAILS: ${{ vars.MCP_ALLOWED_EMAILS }}
-        run: |
-          if [ -z "$ALLOWED_EMAILS" ]; then
-            echo "vars.MCP_ALLOWED_EMAILS is not set." >&2
-            echo "Set it to the comma-separated allowlist of Google accounts, e.g.:" >&2
-            echo "  gh variable set MCP_ALLOWED_EMAILS --body 'you@example.com'" >&2
-            exit 1
-          fi
       - name: Check storage bucket variable
         env:
           BUCKET_NAME: ${{ vars.GCS_BUCKET_NAME }}
@@ -95,16 +85,6 @@ jobs:
             echo "vars.GCS_BUCKET_NAME is not set." >&2
             echo "Set it to the public document bucket, e.g.:" >&2
             echo "  gh variable set GCS_BUCKET_NAME --body 'assistant-mcp-documents'" >&2
-            exit 1
-          fi
-      - name: Check public base URL variable
-        env:
-          MCP_BASE_URL: ${{ vars.MCP_BASE_URL }}
-        run: |
-          if [ -z "$MCP_BASE_URL" ]; then
-            echo "vars.MCP_BASE_URL is not set." >&2
-            echo "Set it to the public Cloud Run URL, e.g.:" >&2
-            echo "  gh variable set MCP_BASE_URL --body 'https://assistant-mcp-k5divdpqfa-ew.a.run.app'" >&2
             exit 1
           fi
       - uses: google-github-actions/auth@v3
@@ -136,9 +116,8 @@ jobs:
           region: europe-west1
           project_id: rubenschulze-sandbox
           image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
-          env_vars: MCP_TRANSPORT=http,MCP_BASE_URL=${{ vars.MCP_BASE_URL }},MCP_ALLOWED_EMAILS=${{ vars.MCP_ALLOWED_EMAILS }},MCP_STATELESS_HTTP=true,GCS_BUCKET_NAME=${{ vars.GCS_BUCKET_NAME }}
+          env_vars: MCP_TRANSPORT=http,MCP_SHARED_SECRET_AUTH=true,MCP_STATELESS_HTTP=true,GCS_BUCKET_NAME=${{ vars.GCS_BUCKET_NAME }}
           flags: >-
             --allow-unauthenticated
             --service-account=assistant-mcp-runtime@rubenschulze-sandbox.iam.gserviceaccount.com
-            --set-secrets=GOOGLE_CLIENT_ID=google-client-id:latest,GOOGLE_CLIENT_SECRET=google-client-secret:latest,MCP_OAUTH_STORAGE_KEY=mcp-oauth-storage-key:latest
             --startup-probe=httpGet.path=/healthz,httpGet.port=8080,initialDelaySeconds=0,periodSeconds=1,timeoutSeconds=1,failureThreshold=60
