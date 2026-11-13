@@ -13,7 +13,7 @@ RUN curl -fsSL -o /tmp/pandoc.deb \
          *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
        esac
 
-FROM python:3.14-slim
+FROM python:3.15-slim
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
